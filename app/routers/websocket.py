@@ -53,6 +53,20 @@ def register_handlers(sio: AsyncServer):
             if track.kind == "audio":
                 pc.addTrack(AudioReceiverTrack(track, sid))
 
+        @pc.on("icecandidate")
+        async def on_icecandidate(event):
+            candidate = event.candidate
+            if candidate:
+                await sio.emit(
+                    "ice_candidate",
+                    {
+                        "candidate": candidate.to_sdp(),
+                        "sdpMid": candidate.sdpMid,
+                        "sdpMLineIndex": candidate.sdpMLineIndex,
+                    },
+                    to=sid,
+                )
+
         offer = RTCSessionDescription(sdp=data["sdp"], type=data["type"])
         await pc.setRemoteDescription(offer)
         answer = await pc.createAnswer()
@@ -65,11 +79,7 @@ def register_handlers(sio: AsyncServer):
         )
 
     @sio.event
-    async def ice_candidate(sid, data):
-        candidate = data.get("candidate")
-        if not candidate:
-            return
-
+    async def ice_candidate(sid, candidate):
         rtc_candidate = RTCIceCandidate(
             sdpMid=candidate["sdpMid"],
             sdpMLineIndex=candidate["sdpMLineIndex"],
