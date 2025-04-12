@@ -172,3 +172,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Project-specific files
+nest_pb2_grpc.py
+nest_pb2.py
+.recordings/
