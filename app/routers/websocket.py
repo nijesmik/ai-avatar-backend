@@ -67,6 +67,12 @@ def register_handlers(sio: AsyncServer):
                     to=sid,
                 )
 
+        @pc.on("connectionstatechange")
+        async def on_connectionstatechange():
+            if pc.connectionState in ["disconnected", "failed", "closed"]:
+                await peer_connection_manager.remove(sid)
+                logger.info(f"❌ WebRTC 연결 종료 처리 완료: {sid}")
+
         offer = RTCSessionDescription(sdp=data["sdp"], type=data["type"])
         await pc.setRemoteDescription(offer)
         answer = await pc.createAnswer()
