@@ -22,34 +22,18 @@ class SocketEventHandler:
 
     async def offer(self, sid, data):
         logger.info(f"📡 Offer from {sid}")
-        pc = RTCPeerConnection()
-        await self.peer_connection_manager.add(sid, pc)
 
-        @pc.on("track")
-        def on_track(track):
-            logger.info(f"🎧 Track: {track.kind}")
-            if track.kind == "audio":
-                pc.addTrack(AudioReceiverTrack(track, sid))
+        async def emit_icecandidate(data):
+            await self.sio.emit(
+                "ice_candidate",
+                data,
+                to=sid,
+            )
 
-        @pc.on("icecandidate")
-        async def on_icecandidate(event):
-            candidate = event.candidate
-            if candidate:
-                await self.sio.emit(
-                    "ice_candidate",
-                    {
-                        "candidate": candidate.to_sdp(),
-                        "sdpMid": candidate.sdpMid,
-                        "sdpMLineIndex": candidate.sdpMLineIndex,
-                    },
-                    to=sid,
-                )
-
-        @pc.on("connectionstatechange")
-        async def on_connectionstatechange():
-            if pc.connectionState in ["disconnected", "failed", "closed"]:
-                await self.peer_connection_manager.remove(sid)
-                logger.info(f"❌ WebRTC 연결 종료 처리 완료: {sid}")
+        pc = await self.peer_connection_manager.create(
+            sid,
+            emit_icecandidate
+        )
 
         offer = RTCSessionDescription(sdp=data["sdp"], type=data["type"])
         await pc.setRemoteDescription(offer)
