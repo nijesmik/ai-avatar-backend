@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from os import getenv
 from fastapi import FastAPI
 import socketio
-from app.routers import websocket
+from app.connection.websocket import SocketEventHandler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,6 +15,11 @@ logger.info(f"Allowed origins: {allowed_origins}")
 app = FastAPI()
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=allowed_origins)
 
-websocket.register_handlers(sio)
+handler = SocketEventHandler(sio)
+
+sio.event(handler.connect)
+sio.event(handler.disconnect)
+sio.event(handler.offer)
+sio.event(handler.ice_candidate)
 
 sio_app = socketio.ASGIApp(sio, other_asgi_app=app)
