@@ -31,7 +31,7 @@ class AudioReceiverTrack(MediaStreamTrack):
         frame = await self.track.recv()
         pcm_48k = bytes(frame.planes[0])
         pcm_16k = resample_to_16k(pcm_48k)
-        chunk = self.generate_chunk(pcm_16k)
+        chunk = self.get_chunk(pcm_16k)
         is_speech = self.vad.is_speech(chunk, 16000)
 
         if is_speech:
@@ -39,7 +39,7 @@ class AudioReceiverTrack(MediaStreamTrack):
                 logger.debug("🟢 발화 시작")
                 self.in_speech = True
                 self.queue = asyncio.Queue()
-                self.stt_task = asyncio.create_task(self.stream_stt())
+                self.stt_task = asyncio.create_task(self.create_response())
 
             await self.add_to_queue(pcm_16k)
 
@@ -57,7 +57,7 @@ class AudioReceiverTrack(MediaStreamTrack):
             await self.queue.put(item)
             self.speech_count = 0
 
-    def generate_chunk(self, pcm, desired_ms=20):
+    def get_chunk(self, pcm: bytes, desired_ms=20):
         target_size = desired_ms * BYTES_PER_MS
 
         if len(pcm) >= target_size:
@@ -101,6 +101,6 @@ class AudioReceiverTrack(MediaStreamTrack):
                 yield flush_buffer(buffer, seq_id)
                 seq_id += 1
 
-    async def stream_stt(self):
+    async def create_response(self):
         text = await STTService(self.generate_pcm_iter()).run()
         logger.info(f"🗣️  STT 결과: {text}")

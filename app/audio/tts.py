@@ -13,7 +13,8 @@ logger.setLevel(logging.DEBUG)
 
 class TTSAudioTrack(MediaStreamTrack):
     kind = "audio"
-    sample_rate = 48000
+    _SAMPLE_RATE = 48000
+    _SAMPLES_PER_FRAME = 960
 
     def __init__(self, text: str):
         super().__init__()
@@ -33,16 +34,16 @@ class TTSAudioTrack(MediaStreamTrack):
         self.synthesizer = speechsdk.SpeechSynthesizer(speech_config, audio_config)
 
     async def recv(self):
-        pcm = await self.get_pcm()
+        pcm = await self.get_pcm(self._SAMPLES_PER_FRAME)
 
-        frame = AudioFrame(format="s16", layout="mono", samples=len(pcm))
-        frame.sample_rate = self.sample_rate
-        frame.time_base = Fraction(1, self.sample_rate)
+        frame = AudioFrame(format="s16", layout="mono", samples=self._SAMPLES_PER_FRAME)
+        frame.sample_rate = self._SAMPLE_RATE
+        frame.time_base = Fraction(1, self._SAMPLE_RATE)
         frame.planes[0].update(pcm.tobytes())
 
         return frame
 
-    async def get_pcm(self, size=960) -> np.ndarray:
+    async def get_pcm(self, size: int) -> np.ndarray:
         while len(self.buffer) < size:
             chunk = await self.queue.get()
             if chunk is None:
@@ -87,7 +88,7 @@ class TTSAudioTrack(MediaStreamTrack):
                 self.queue.put(pcm), asyncio.get_event_loop()
             )
 
-    async def start(self):
+    async def run(self):
         await asyncio.gather(
             self.run_synthesis(),
             self.consume_audio_stream(),
