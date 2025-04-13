@@ -2,7 +2,7 @@ from aiortc import MediaStreamTrack
 import logging
 import webrtcvad
 import asyncio
-from app.audio.stt import speech_to_text
+from app.audio.stt import STTService
 from app.audio.resample import resample_to_16k
 from app.audio.utils import save_as_wav
 
@@ -102,5 +102,5 @@ class AudioReceiverTrack(MediaStreamTrack):
                 seq_id += 1
 
     async def stream_stt(self):
-        text = await speech_to_text(self.generate_pcm_iter())
+        text = await STTService(self.generate_pcm_iter()).run()
         logger.info(f"🗣️  STT 결과: {text}")
