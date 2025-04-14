@@ -1,7 +1,6 @@
 import logging
 from socketio import AsyncServer
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate
-from app.audio.receiver import AudioReceiverTrack
+from aiortc import RTCSessionDescription, RTCIceCandidate
 from app.connection.webrtc import PeerConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -30,10 +29,7 @@ class SocketEventHandler:
                 to=sid,
             )
 
-        pc = await self.peer_connection_manager.create(
-            sid,
-            emit_icecandidate
-        )
+        pc = await self.peer_connection_manager.create(sid, emit_icecandidate)
 
         offer = RTCSessionDescription(sdp=data["sdp"], type=data["type"])
         await pc.setRemoteDescription(offer)
