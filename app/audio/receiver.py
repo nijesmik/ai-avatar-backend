@@ -1,10 +1,13 @@
-from aiortc import MediaStreamTrack
+from aiortc import RTCPeerConnection
+from aiortc.rtcrtpreceiver import RemoteStreamTrack
+from aiortc.mediastreams import MediaStreamError
 import logging
 import webrtcvad
 import asyncio
 from app.audio.stt import STTService
 from app.audio.resample import resample_to_16k
 from app.audio.utils import save_as_wav
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -14,34 +17,50 @@ BYTES_PER_MS = 16 * 2
 BYTES_PER_SECOND = BYTES_PER_MS * 1000
 
 
-class AudioReceiverTrack(MediaStreamTrack):
-    kind = "audio"
+class AudioReceiver:
     vad = webrtcvad.Vad(3)
 
-    def __init__(self, track, sid):
+    def __init__(self, track: RemoteStreamTrack, sid, pc: RTCPeerConnection):
         super().__init__()
         self.track = track
         self.sid = sid
+        self.pc = pc
+
         self.in_speech = False
         self.speech_count = 0
         self.queue = asyncio.Queue()
-        self.stt_task = None
+
+        self.task = None
+        self.sender = None
 
     async def recv(self):
-        frame = await self.track.recv()
-        pcm_48k = bytes(frame.planes[0])
-        pcm_16k = resample_to_16k(pcm_48k)
-        chunk = self.get_chunk(pcm_16k)
+        try:
+            while True:
+                frame = await self.track.recv()
+                pcm_48k = bytes(frame.planes[0])
+                pcm_16k = resample_to_16k(pcm_48k)
+                await self.detect_speech(pcm_16k)
+
+        except MediaStreamError:
+            logger.info(f"❌ MediaStream 종료: {self.sid}")
+
+        except asyncio.CancelledError:
+            await self.cancel()
+            logger.info(f"❌ AudioReceiver 종료: {self.sid}")
+            raise
+
+    async def detect_speech(self, pcm: bytes):
+        chunk = self.get_chunk(pcm)
         is_speech = self.vad.is_speech(chunk, 16000)
 
         if is_speech:
-            if not self.in_speech and self.stt_task is None:
+            if not self.in_speech and self.task is None:
                 logger.debug("🟢 발화 시작")
                 self.in_speech = True
                 self.queue = asyncio.Queue()
-                self.stt_task = asyncio.create_task(self.create_response())
+                self.task = asyncio.create_task(self.create_response())
 
-            await self.add_to_queue(pcm_16k)
+            await self.add_to_queue(pcm)
 
         elif self.in_speech:
             self.speech_count += 1
@@ -49,8 +68,6 @@ class AudioReceiverTrack(MediaStreamTrack):
                 logger.debug("🔴 발화 종료")
                 await self.add_to_queue(None)
                 self.in_speech = False
-
-        return frame
 
     async def add_to_queue(self, item):
         if self.in_speech:
@@ -104,3 +121,13 @@ class AudioReceiverTrack(MediaStreamTrack):
     async def create_response(self):
         text = await STTService(self.generate_pcm_iter()).run()
         logger.info(f"🗣️  STT 결과: {text}")
+
+    async def cancel(self):
+        self.track.stop()
+
+        if self.task:
+            self.task.cancel()
+            try:
+                await self.task
+            except asyncio.CancelledError:
+                pass
