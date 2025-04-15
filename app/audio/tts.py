@@ -24,13 +24,14 @@ class TTSAudioTrack(MediaStreamTrack):
         self.buffer = np.array([], dtype=np.int16)
 
         speech_config = speechsdk.SpeechConfig(
-            subscription=getenv("AZURE_SPEECH_KEY"), region=getenv("AZURE_REGION")
+            subscription=getenv("AZURE_SPEECH_KEY"),
+            region=getenv("AZURE_SPEECH_REGION"),
         )
         speech_config.speech_synthesis_voice_name = AzureTTSVoiceKorean.InJoon
         speech_config.set_speech_synthesis_output_format(
             speechsdk.SpeechSynthesisOutputFormat.Raw48Khz16BitMonoPcm
         )
-        self.audio_stream = speechsdk.audio.PushAudioOutputStream()
+        self.audio_stream = speechsdk.audio.PushAudioOutputStream(_Callback(self.queue))
         audio_config = speechsdk.audio.AudioOutputConfig(stream=self.audio_stream)
         self.synthesizer = speechsdk.SpeechSynthesizer(speech_config, audio_config)
 
@@ -76,21 +77,22 @@ class TTSAudioTrack(MediaStreamTrack):
                         "Error details: {}".format(cancellation_details.error_details)
                     )
 
-    async def consume_audio_stream(self):
-        while True:
-            chunk = await asyncio.to_thread(self.audio_stream.read)
-            if not chunk:
-                asyncio.run_coroutine_threadsafe(
-                    self.queue.put(None), asyncio.get_event_loop()
-                )
-                break
-            pcm = np.frombuffer(chunk, dtype=np.int16)
-            asyncio.run_coroutine_threadsafe(
-                self.queue.put(pcm), asyncio.get_event_loop()
-            )
-
     async def run(self):
-        await asyncio.gather(
-            self.run_synthesis(),
-            self.consume_audio_stream(),
-        )
+        await self.run_synthesis()
+
+
+class _Callback(speechsdk.audio.PushAudioOutputStreamCallback):
+    def __init__(self, queue: asyncio.Queue):
+        super().__init__()
+        self.queue = queue
+        self.loop = asyncio.get_running_loop()
+
+    def write(self, audio_buffer: memoryview) -> int:
+        pcm = np.frombuffer(audio_buffer, dtype=np.int16)
+        asyncio.run_coroutine_threadsafe(self.queue.put(pcm), self.loop)
+
+        logger.debug(f"write called with {len(audio_buffer)} bytes")
+        return len(audio_buffer)
+
+    def close(self):
+        asyncio.run_coroutine_threadsafe(self.queue.put(None), self.loop)
