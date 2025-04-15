@@ -6,6 +6,7 @@ import numpy as np
 import asyncio
 from av import AudioFrame
 from fractions import Fraction
+from app.audio.tts_voice import AzureTTSVoiceKorean
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -25,7 +26,7 @@ class TTSAudioTrack(MediaStreamTrack):
         speech_config = speechsdk.SpeechConfig(
             subscription=getenv("AZURE_SPEECH_KEY"), region=getenv("AZURE_REGION")
         )
-        speech_config.speech_synthesis_voice_name = "ko-KR-InJoonNeural"
+        speech_config.speech_synthesis_voice_name = AzureTTSVoiceKorean.InJoon
         speech_config.set_speech_synthesis_output_format(
             speechsdk.SpeechSynthesisOutputFormat.Raw48Khz16BitMonoPcm
         )
