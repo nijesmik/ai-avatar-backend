@@ -10,7 +10,7 @@ logger.setLevel(logging.INFO)
 class SocketEventHandler:
     def __init__(self, sio: AsyncServer):
         self.sio = sio
-        self.peer_connection_manager = PeerConnectionManager()
+        self.peer_connection_manager = PeerConnectionManager(sio)
 
     async def connect(self, sid, environ):
         logger.info(f"🔌 Connected: {sid}")
@@ -22,14 +22,7 @@ class SocketEventHandler:
     async def offer(self, sid, data):
         logger.info(f"📡 Offer from {sid}")
 
-        async def emit_icecandidate(data):
-            await self.sio.emit(
-                "ice_candidate",
-                data,
-                to=sid,
-            )
-
-        pc = await self.peer_connection_manager.create(sid, emit_icecandidate)
+        pc = await self.peer_connection_manager.create(sid)
 
         offer = RTCSessionDescription(sdp=data["sdp"], type=data["type"])
         await pc.setRemoteDescription(offer)

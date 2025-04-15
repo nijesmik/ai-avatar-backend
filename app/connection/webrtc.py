@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from socketio import AsyncServer
 from aiortc import RTCPeerConnection
 from app.audio.receiver import AudioReceiver
 
@@ -8,7 +9,8 @@ logger.setLevel(logging.INFO)
 
 
 class PeerConnectionManager:
-    def __init__(self):
+    def __init__(self, sio: AsyncServer):
+        self.sio = sio
         self.peer_connections = {}
         self.audio_receivers = {}
         self.lock = asyncio.Lock()
@@ -41,7 +43,7 @@ class PeerConnectionManager:
             task = asyncio.create_task(ar.recv())
             self.audio_receivers[sid] = (ar, task)
 
-    async def create(self, sid, emit_icecandidate):
+    async def create(self, sid):
         pc = RTCPeerConnection()
 
         @pc.on("track")
@@ -60,12 +62,14 @@ class PeerConnectionManager:
         async def on_icecandidate(event):
             candidate = event.candidate
             if candidate:
-                await emit_icecandidate(
+                await self.sio.emit(
+                    "ice_candidate",
                     {
                         "candidate": candidate.to_sdp(),
                         "sdpMid": candidate.sdpMid,
                         "sdpMLineIndex": candidate.sdpMLineIndex,
                     },
+                    to=sid,
                 )
 
         await self.add(sid, pc)
