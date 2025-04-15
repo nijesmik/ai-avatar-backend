@@ -20,11 +20,11 @@ BYTES_PER_SECOND = BYTES_PER_MS * 1000
 class AudioReceiver:
     vad = webrtcvad.Vad(3)
 
-    def __init__(self, track: RemoteStreamTrack, sid, pc: RTCPeerConnection):
+    def __init__(self, track: RemoteStreamTrack, sid, offer_callback):
         super().__init__()
         self.track = track
         self.sid = sid
-        self.pc = pc
+        self.offer = offer_callback
 
         self.in_speech = False
         self.speech_count = 0

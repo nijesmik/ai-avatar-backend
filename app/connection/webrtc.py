@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from socketio import AsyncServer
-from aiortc import RTCPeerConnection
+from aiortc import RTCPeerConnection, MediaStreamTrack
 from app.audio.receiver import AudioReceiver
 
 logger = logging.getLogger(__name__)
@@ -46,11 +46,25 @@ class PeerConnectionManager:
     async def create(self, sid):
         pc = RTCPeerConnection()
 
+        async def offer(track: MediaStreamTrack):
+            pc.addTrack(track)
+
+            offer = await pc.createOffer()
+            await pc.setLocalDescription(offer)
+            await self.sio.emit(
+                "offer",
+                {
+                    "sdp": pc.localDescription.sdp,
+                    "type": pc.localDescription.type,
+                },
+                to=sid,
+            )
+
         @pc.on("track")
         async def on_track(track):
             logger.info(f"🎧 Track: {track.kind}")
             if track.kind == "audio":
-                await self._add_audio_receiver(sid, AudioReceiver(track, sid, pc))
+                await self._add_audio_receiver(sid, AudioReceiver(track, sid, offer))
 
         @pc.on("connectionstatechange")
         async def on_connectionstatechange():
