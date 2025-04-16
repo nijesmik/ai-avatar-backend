@@ -5,67 +5,69 @@ from aiortc import RTCPeerConnection, MediaStreamTrack
 from app.audio.receiver import AudioReceiver
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
+
+
+class PeerConnection(RTCPeerConnection):
+    def __init__(self, sid, sio: AsyncServer):
+        super().__init__()
+        self.sid = sid
+        self.sio = sio
+        self.audio_receiver = None
+        self.recv_task = None
+
+    def set_audio_receiver(self, track):
+        if self.audio_receiver:
+            return
+
+        self.audio_receiver = AudioReceiver(track, self.sid, self.add_new_track)
+        self.recv_task = asyncio.create_task(self.audio_receiver.recv())
+
+    async def add_new_track(self, track: MediaStreamTrack):
+        self.addTrack(track)
+        await self.sio.emit("renegotiate", to=self.sid)
 
 
 class PeerConnectionManager:
     def __init__(self, sio: AsyncServer):
         self.sio = sio
         self.peer_connections = {}
-        self.audio_receivers = {}
         self.lock = asyncio.Lock()
 
-    async def add(self, sid, pc: RTCPeerConnection):
+    async def add(self, sid, pc: PeerConnection):
         async with self.lock:
             self.peer_connections[sid] = pc
 
-    async def get(self, sid) -> RTCPeerConnection | None:
+    async def get(self, sid) -> PeerConnection | None:
         async with self.lock:
             return self.peer_connections.get(sid, None)
 
     async def remove(self, sid):
         async with self.lock:
             pc = self.peer_connections.pop(sid, None)
-            (ar, task) = self.audio_receivers.pop(sid, (None, None))
 
-        if task:
-            task.cancel()
+        if not pc:
+            return
+
+        if pc.recv_task:
+            pc.recv_task.cancel()
             try:
                 logger.debug(f"🟡 AudioReceiver 종료 대기: {sid}")
-                await task
+                await pc.recv_task
             except asyncio.CancelledError:
                 pass
 
-        if pc:
-            await pc.close()
-            logger.info(f"❌ PeerConnection 종료: {sid}")
-
-    async def _add_audio_receiver(self, sid, ar: AudioReceiver):
-        async with self.lock:
-            task = asyncio.create_task(ar.recv())
-            self.audio_receivers[sid] = (ar, task)
+        await pc.close()
+        logger.info(f"❌ PeerConnection 종료: {sid}")
 
     async def create(self, sid):
-        pc = RTCPeerConnection()
-
-        async def offer(track: MediaStreamTrack):
-            pc.addTrack(track)
-
-            offer = await pc.createOffer()
-            await pc.setLocalDescription(offer)
-            await self.sio.emit(
-                "offer",
-                {
-                    "sdp": pc.localDescription.sdp,
-                    "type": pc.localDescription.type,
-                },
-                to=sid,
-            )
+        pc = PeerConnection(sid, self.sio)
 
         @pc.on("track")
         async def on_track(track):
+            logger.debug(f"📥 Track 수신: {track.kind} - {sid}")
             if track.kind == "audio":
-                await self._add_audio_receiver(sid, AudioReceiver(track, sid, offer))
+                pc.set_audio_receiver(track)
 
         @pc.on("connectionstatechange")
         async def on_connectionstatechange():

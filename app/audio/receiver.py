@@ -1,4 +1,3 @@
-from aiortc import RTCPeerConnection
 from aiortc.rtcrtpreceiver import RemoteStreamTrack
 from aiortc.mediastreams import MediaStreamError
 import logging
@@ -7,6 +6,7 @@ import asyncio
 from app.audio.stt import STTService
 from app.audio.resample import resample_to_16k
 from app.audio.utils import save_as_wav
+from app.audio.tts import TTSAudioTrack
 
 
 logger = logging.getLogger(__name__)
@@ -20,18 +20,17 @@ BYTES_PER_SECOND = BYTES_PER_MS * 1000
 class AudioReceiver:
     vad = webrtcvad.Vad(3)
 
-    def __init__(self, track: RemoteStreamTrack, sid, offer_callback):
+    def __init__(self, track: RemoteStreamTrack, sid, add_track_callback):
         super().__init__()
         self.track = track
         self.sid = sid
-        self.offer = offer_callback
+        self.add_track = add_track_callback
 
         self.in_speech = False
         self.speech_count = 0
         self.queue = asyncio.Queue()
 
-        self.task = None
-        self.sender = None
+        self.response_task = None
 
     async def recv(self):
         try:
@@ -54,11 +53,11 @@ class AudioReceiver:
         is_speech = self.vad.is_speech(chunk, 16000)
 
         if is_speech:
-            if not self.in_speech and self.task is None:
+            if not self.in_speech and self.response_task is None:
                 logger.debug("🟢 발화 시작")
                 self.in_speech = True
                 self.queue = asyncio.Queue()
-                self.task = asyncio.create_task(self.create_response())
+                self.response_task = asyncio.create_task(self.create_response())
 
             await self.add_to_queue(pcm)
 
@@ -125,9 +124,9 @@ class AudioReceiver:
     async def cancel(self):
         self.track.stop()
 
-        if self.task:
-            self.task.cancel()
+        if self.response_task:
+            self.response_task.cancel()
             try:
-                await self.task
+                await self.response_task
             except asyncio.CancelledError:
-                pass
+                logger.info(f"❌ 응답 생성 취소: {self.sid}")

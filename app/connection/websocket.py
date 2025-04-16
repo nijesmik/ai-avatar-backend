@@ -20,7 +20,9 @@ class SocketEventHandler:
         await self.peer_connection_manager.remove(sid)
 
     async def offer(self, sid, data):
-        pc = await self.peer_connection_manager.create(sid)
+        pc = await self.peer_connection_manager.get(sid)
+        if not pc:
+            pc = await self.peer_connection_manager.create(sid)
 
         offer = RTCSessionDescription(sdp=data["sdp"], type=data["type"])
         await pc.setRemoteDescription(offer)
