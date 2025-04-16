@@ -1,7 +1,9 @@
 import asyncio
 import logging
+
+from aiortc import MediaStreamTrack, RTCPeerConnection
 from socketio import AsyncServer
-from aiortc import RTCPeerConnection, MediaStreamTrack
+
 from app.audio.receiver import AudioReceiver
 
 logger = logging.getLogger(__name__)

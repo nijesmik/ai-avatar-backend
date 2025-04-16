@@ -1,6 +1,8 @@
 import logging
+
+from aiortc import RTCIceCandidate, RTCSessionDescription
 from socketio import AsyncServer
-from aiortc import RTCSessionDescription, RTCIceCandidate
+
 from app.connection.webrtc import PeerConnectionManager
 
 logger = logging.getLogger(__name__)

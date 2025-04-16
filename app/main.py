@@ -1,8 +1,10 @@
 import logging
-from dotenv import load_dotenv
 from os import getenv
-from fastapi import FastAPI
+
 import socketio
+from dotenv import load_dotenv
+from fastapi import FastAPI
+
 from app.connection.websocket import SocketEventHandler
 
 logging.basicConfig(level=logging.INFO)

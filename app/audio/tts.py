@@ -1,11 +1,14 @@
-from aiortc import MediaStreamTrack
-from os import getenv
-import azure.cognitiveservices.speech as speechsdk
-import logging
-import numpy as np
 import asyncio
-from av import AudioFrame
+import logging
+import time
 from fractions import Fraction
+from os import getenv
+
+import azure.cognitiveservices.speech as speechsdk
+import numpy as np
+from aiortc import MediaStreamTrack
+from av import AudioFrame
+
 from app.audio.tts_voice import AzureTTSVoiceKorean
 
 logger = logging.getLogger(__name__)

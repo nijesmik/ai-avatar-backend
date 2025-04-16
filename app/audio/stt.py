@@ -1,10 +1,11 @@
-from os import getenv
-import grpc.aio
-import nest_pb2
-import nest_pb2_grpc
 import json
 import logging
-import time
+from os import getenv
+
+import grpc.aio
+
+import nest_pb2
+import nest_pb2_grpc
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
