@@ -19,9 +19,9 @@ class PeerConnectionManager:
         async with self.lock:
             self.peer_connections[sid] = pc
 
-    async def get(self, sid):
+    async def get(self, sid) -> RTCPeerConnection | None:
         async with self.lock:
-            return self.peer_connections.get(sid)
+            return self.peer_connections.get(sid, None)
 
     async def remove(self, sid):
         async with self.lock:
@@ -31,12 +31,14 @@ class PeerConnectionManager:
         if task:
             task.cancel()
             try:
+                logger.debug(f"🟡 AudioReceiver 종료 대기: {sid}")
                 await task
             except asyncio.CancelledError:
                 pass
 
         if pc:
             await pc.close()
+            logger.info(f"❌ PeerConnection 종료: {sid}")
 
     async def _add_audio_receiver(self, sid, ar: AudioReceiver):
         async with self.lock:
@@ -62,7 +64,6 @@ class PeerConnectionManager:
 
         @pc.on("track")
         async def on_track(track):
-            logger.info(f"🎧 Track: {track.kind}")
             if track.kind == "audio":
                 await self._add_audio_receiver(sid, AudioReceiver(track, sid, offer))
 
@@ -70,7 +71,6 @@ class PeerConnectionManager:
         async def on_connectionstatechange():
             if pc.connectionState in ["disconnected", "failed", "closed"]:
                 await self.remove(sid)
-                logger.info(f"❌ WebRTC 연결 종료 처리 완료: {sid}")
 
         @pc.on("icecandidate")
         async def on_icecandidate(event):

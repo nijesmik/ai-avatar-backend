@@ -20,8 +20,6 @@ class SocketEventHandler:
         await self.peer_connection_manager.remove(sid)
 
     async def offer(self, sid, data):
-        logger.info(f"📡 Offer from {sid}")
-
         pc = await self.peer_connection_manager.create(sid)
 
         offer = RTCSessionDescription(sdp=data["sdp"], type=data["type"])
@@ -35,12 +33,12 @@ class SocketEventHandler:
             to=sid,
         )
 
-    async def ice_candidate(self, sid, candidate):
-        rtc_candidate = RTCIceCandidate(
-            sdpMid=candidate["sdpMid"],
-            sdpMLineIndex=candidate["sdpMLineIndex"],
-            candidate=candidate["candidate"],
+    async def ice_candidate(self, sid, data):
+        candidate = RTCIceCandidate(
+            sdpMid=data["sdpMid"],
+            sdpMLineIndex=data["sdpMLineIndex"],
+            candidate=data["candidate"],
         )
         pc = await self.peer_connection_manager.get(sid)
         if pc:
-            await pc.addIceCandidate(rtc_candidate)
+            await pc.addIceCandidate(candidate)
