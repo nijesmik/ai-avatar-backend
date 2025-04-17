@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from array import array
 from fractions import Fraction
 from os import getenv
 
@@ -10,6 +11,7 @@ from aiortc import MediaStreamTrack
 from av import AudioFrame
 
 from app.audio.tts_voice import AzureTTSVoiceKorean
+from app.audio.utils import WavFileWriter
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -22,30 +24,37 @@ class TTSAudioTrack(MediaStreamTrack):
 
     def __init__(self, text: str):
         super().__init__()
+        self._start = None
+        self._timestamp = 0
+
         self.text = text
         self.queue = asyncio.Queue()
-        self.buffer = np.array([], dtype=np.int16)
+        self.buffer = array("h")
 
-        speech_config = speechsdk.SpeechConfig(
+        self.speech_config = speechsdk.SpeechConfig(
             subscription=getenv("AZURE_SPEECH_KEY"),
             region=getenv("AZURE_SPEECH_REGION"),
         )
-        speech_config.speech_synthesis_voice_name = AzureTTSVoiceKorean.InJoon
-        speech_config.set_speech_synthesis_output_format(
+        self.speech_config.speech_synthesis_voice_name = AzureTTSVoiceKorean.InJoon
+        self.speech_config.set_speech_synthesis_output_format(
             speechsdk.SpeechSynthesisOutputFormat.Raw48Khz16BitMonoPcm
         )
-        self.audio_stream = speechsdk.audio.PushAudioOutputStream(_Callback(self.queue))
-        audio_config = speechsdk.audio.AudioOutputConfig(stream=self.audio_stream)
-        self.synthesizer = speechsdk.SpeechSynthesizer(speech_config, audio_config)
 
     async def recv(self):
         pcm = await self.get_pcm(self._SAMPLES_PER_FRAME)
 
-        frame = AudioFrame(format="s16", layout="mono", samples=self._SAMPLES_PER_FRAME)
-        frame.sample_rate = self._SAMPLE_RATE
-        frame.time_base = Fraction(1, self._SAMPLE_RATE)
-        frame.planes[0].update(pcm.tobytes())
+        if self._start:
+            self._timestamp += self._SAMPLES_PER_FRAME
+            wait = self._start + (self._timestamp / self._SAMPLE_RATE) - time.time()
+            if wait > 0:
+                await asyncio.sleep(wait * 3)
+        else:
+            self._start = time.time()
 
+        frame = AudioFrame.from_ndarray(pcm.reshape(1, -1), format="s16", layout="mono")
+        frame.sample_rate = self._SAMPLE_RATE
+        frame.pts = self._timestamp
+        frame.time_base = Fraction(1, self._SAMPLE_RATE)
         return frame
 
     async def get_pcm(self, size: int) -> np.ndarray:
@@ -53,18 +62,22 @@ class TTSAudioTrack(MediaStreamTrack):
             chunk = await self.queue.get()
             if chunk is None:
                 break
-            self.buffer = np.concatenate([self.buffer, chunk])
+            self.buffer.extend(array("h", chunk))
 
-        pcm = self.buffer[:size]
-        self.buffer = self.buffer[size:]
+        pcm = array("h", self.buffer[:size])
+        del self.buffer[:size]
 
-        if len(pcm) < size:
-            pcm = np.pad(pcm, (0, size - len(pcm)), mode="constant", constant_values=0)
+        padding = size - len(pcm)
+        if padding > 0:
+            pcm.extend(array("h", (0 for _ in range(padding))))
 
-        return pcm
+        return np.frombuffer(memoryview(pcm), dtype=np.int16)
 
     async def run_synthesis(self):
-        future = self.synthesizer.speak_text_async(self.text)
+        audio_stream = speechsdk.audio.PushAudioOutputStream(_Callback(self.queue))
+        audio_config = speechsdk.audio.AudioOutputConfig(stream=audio_stream)
+        synthesizer = speechsdk.SpeechSynthesizer(self.speech_config, audio_config)
+        future = synthesizer.speak_text_async(self.text)
         result = await asyncio.to_thread(future.get)
 
         if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
@@ -80,22 +93,28 @@ class TTSAudioTrack(MediaStreamTrack):
                         "Error details: {}".format(cancellation_details.error_details)
                     )
 
-    async def run(self):
-        await self.run_synthesis()
-
 
 class _Callback(speechsdk.audio.PushAudioOutputStreamCallback):
-    def __init__(self, queue: asyncio.Queue):
+    def __init__(self, queue: asyncio.Queue, debug=False):
         super().__init__()
         self.queue = queue
         self.loop = asyncio.get_running_loop()
+        self.debug = debug
+        self.wav = None
+        if debug:
+            self.wav = WavFileWriter(path_prefix="original")
 
     def write(self, audio_buffer: memoryview) -> int:
-        pcm = np.frombuffer(audio_buffer, dtype=np.int16)
-        asyncio.run_coroutine_threadsafe(self.queue.put(pcm), self.loop)
+        chunk = audio_buffer.tobytes()
+        asyncio.run_coroutine_threadsafe(self.queue.put(chunk), self.loop)
 
-        logger.debug(f"write called with {len(audio_buffer)} bytes")
+        if self.debug:
+            self.wav.write(chunk)
+
         return len(audio_buffer)
 
     def close(self):
         asyncio.run_coroutine_threadsafe(self.queue.put(None), self.loop)
+
+        if self.debug:
+            self.wav.close()
