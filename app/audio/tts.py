@@ -1,15 +1,12 @@
 import asyncio
 import logging
-import time
 from array import array
-from fractions import Fraction
 from os import getenv
 
 import azure.cognitiveservices.speech as speechsdk
 import numpy as np
-from aiortc import MediaStreamTrack
-from av import AudioFrame
 
+from app.audio.track import AudioTrack
 from app.audio.tts_voice import AzureTTSVoiceKorean
 from app.audio.utils import WavFileWriter
 
@@ -17,16 +14,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class TTSAudioTrack(MediaStreamTrack):
-    kind = "audio"
-    _SAMPLE_RATE = 48000
-    _SAMPLES_PER_FRAME = 960
-
+class TTSAudioTrack(AudioTrack):
     def __init__(self, text: str):
         super().__init__()
-        self._start = None
-        self._timestamp = 0
-
         self.text = text
         self.queue = asyncio.Queue()
         self.buffer = array("h")
@@ -41,21 +31,9 @@ class TTSAudioTrack(MediaStreamTrack):
         )
 
     async def recv(self):
-        pcm = await self.get_pcm(self._SAMPLES_PER_FRAME)
-
-        if self._start:
-            self._timestamp += self._SAMPLES_PER_FRAME
-            wait = self._start + (self._timestamp / self._SAMPLE_RATE) - time.time()
-            if wait > 0:
-                await asyncio.sleep(wait * 3)
-        else:
-            self._start = time.time()
-
-        frame = AudioFrame.from_ndarray(pcm.reshape(1, -1), format="s16", layout="mono")
-        frame.sample_rate = self._SAMPLE_RATE
-        frame.pts = self._timestamp
-        frame.time_base = Fraction(1, self._SAMPLE_RATE)
-        return frame
+        pcm = await self.get_pcm(self.samples_per_frame)
+        await self.sleep()
+        return self.create_frame(pcm)
 
     async def get_pcm(self, size: int) -> np.ndarray:
         while len(self.buffer) < size:
