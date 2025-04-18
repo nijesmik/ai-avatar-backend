@@ -6,6 +6,7 @@ from azure.cognitiveservices.speech import SpeechSynthesisVisemeEventArgs
 from socketio import AsyncServer
 
 from app.audio.receiver import AudioReceiver
+from app.audio.track import AudioTrack
 from app.audio.tts import TTSAudioTrack
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ class PeerConnection(RTCPeerConnection):
         super().__init__()
         self.sid = sid
         self.sio = sio
+        self.sender = self.addTrack(AudioTrack())
         self.audio_receiver = None
         self.recv_task = None
         self.loop = asyncio.get_running_loop()
@@ -30,9 +32,20 @@ class PeerConnection(RTCPeerConnection):
 
     async def tts(self, text: str):
         tts = TTSAudioTrack(text, self.send_viseme)
+        self.add_tts_track(tts)
+        await tts.run_synthesis()
+
+    async def add_tts_track(self, tts: TTSAudioTrack):
         self.addTrack(tts)
         await self.sio.emit("renegotiate", to=self.sid)
-        await tts.run_synthesis()
+
+    async def replace_tts_track(self, tts: TTSAudioTrack):
+        old_track: AudioTrack = self.sender.track
+        tts.start_time = old_track.start_time
+        self.sender.replaceTrack(tts)
+
+        if old_track:
+            old_track.stop()
 
     def send_viseme(self, event: SpeechSynthesisVisemeEventArgs):
         asyncio.run_coroutine_threadsafe(

@@ -21,8 +21,8 @@ class TestAudioTrack(AudioTrack):
         raw = self.wav.readframes(self.samples_per_frame)
         if not raw:
             self.wav.close()
-            self.stop()
-            raise MediaStreamError("End of stream")
+            logger.info("🔚 end of stream")
+            await self.event.wait()
 
         data = np.frombuffer(raw, dtype=np.int16)
         logger.debug(f"recv called with {len(data) * 2} bytes")
