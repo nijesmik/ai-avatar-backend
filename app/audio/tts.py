@@ -15,7 +15,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class TTSAudioTrack(AudioTrack):
-    def __init__(self, text: str):
+    def __init__(self, text: str, viseme_callback):
         super().__init__()
         self.text = text
         self.queue = asyncio.Queue()
@@ -29,6 +29,8 @@ class TTSAudioTrack(AudioTrack):
         self.speech_config.set_speech_synthesis_output_format(
             speechsdk.SpeechSynthesisOutputFormat.Raw48Khz16BitMonoPcm
         )
+
+        self.viseme_callback = viseme_callback
 
     async def recv(self):
         pcm = await self.get_pcm(self.samples_per_frame)
@@ -55,6 +57,7 @@ class TTSAudioTrack(AudioTrack):
         audio_stream = speechsdk.audio.PushAudioOutputStream(_Callback(self.queue))
         audio_config = speechsdk.audio.AudioOutputConfig(stream=audio_stream)
         synthesizer = speechsdk.SpeechSynthesizer(self.speech_config, audio_config)
+        synthesizer.viseme_received.connect(self.viseme_callback)
         future = synthesizer.speak_text_async(self.text)
         result = await asyncio.to_thread(future.get)
 

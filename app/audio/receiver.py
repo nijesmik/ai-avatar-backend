@@ -1,13 +1,13 @@
-from aiortc.rtcrtpreceiver import RemoteStreamTrack
-from aiortc.mediastreams import MediaStreamError
-import logging
-import webrtcvad
 import asyncio
-from app.audio.stt import STTService
-from app.audio.resample import resample_to_16k
-from app.audio.utils import save_as_wav
-from app.audio.tts import TTSAudioTrack
+import logging
 
+import webrtcvad
+from aiortc.mediastreams import MediaStreamError
+from aiortc.rtcrtpreceiver import RemoteStreamTrack
+
+from app.audio.resample import resample_to_16k
+from app.audio.stt import STTService
+from app.audio.utils import save_as_wav
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -20,11 +20,11 @@ BYTES_PER_SECOND = BYTES_PER_MS * 1000
 class AudioReceiver:
     vad = webrtcvad.Vad(3)
 
-    def __init__(self, track: RemoteStreamTrack, sid, add_track_callback):
+    def __init__(self, track: RemoteStreamTrack, sid, tts_callback):
         super().__init__()
         self.track = track
         self.sid = sid
-        self.add_track = add_track_callback
+        self.run_tts = tts_callback
 
         self.in_speech = False
         self.speech_count = 0

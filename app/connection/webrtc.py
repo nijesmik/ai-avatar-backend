@@ -1,10 +1,12 @@
 import asyncio
 import logging
 
-from aiortc import MediaStreamTrack, RTCPeerConnection
+from aiortc import RTCPeerConnection
+from azure.cognitiveservices.speech import SpeechSynthesisVisemeEventArgs
 from socketio import AsyncServer
 
 from app.audio.receiver import AudioReceiver
+from app.audio.tts import TTSAudioTrack
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -17,17 +19,34 @@ class PeerConnection(RTCPeerConnection):
         self.sio = sio
         self.audio_receiver = None
         self.recv_task = None
+        self.loop = asyncio.get_running_loop()
 
     def set_audio_receiver(self, track):
         if self.audio_receiver:
             return
 
-        self.audio_receiver = AudioReceiver(track, self.sid, self.add_new_track)
+        self.audio_receiver = AudioReceiver(track, self.sid, self.tts)
         self.recv_task = asyncio.create_task(self.audio_receiver.recv())
 
-    async def add_new_track(self, track: MediaStreamTrack):
-        self.addTrack(track)
+    async def tts(self, text: str):
+        tts = TTSAudioTrack(text, self.send_viseme)
+        self.addTrack(tts)
         await self.sio.emit("renegotiate", to=self.sid)
+        await tts.run_synthesis()
+
+    def send_viseme(self, event: SpeechSynthesisVisemeEventArgs):
+        asyncio.run_coroutine_threadsafe(
+            self.sio.emit(
+                "viseme",
+                {
+                    "animation": event.animation,
+                    "audio_offset": event.audio_offset / 10000,
+                    "viseme_id": event.viseme_id,
+                },
+                to=self.sid,
+            ),
+            self.loop,
+        )
 
 
 class PeerConnectionManager:
