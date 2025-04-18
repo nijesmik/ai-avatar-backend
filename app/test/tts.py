@@ -1,3 +1,4 @@
+import json
 import wave
 from os import getenv
 
@@ -41,10 +42,26 @@ audio_stream = speechsdk.audio.PushAudioOutputStream(_Callback())
 audio_config = speechsdk.audio.AudioOutputConfig(stream=audio_stream)
 synthesizer = speechsdk.SpeechSynthesizer(speech_config, audio_config)
 
+viseme = []
+
+def viseme_callback(event: speechsdk.SpeechSynthesisVisemeEventArgs):
+    viseme.append(
+        {
+            "animation": event.animation,
+            "audio_offset": event.audio_offset / 10000,
+            "viseme_id": event.viseme_id,
+        }
+    )
+
+synthesizer.viseme_received.connect(viseme_callback)
+
 speech_synthesis_result = synthesizer.speak_text_async(text).get()
 
 if speech_synthesis_result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
     print("Speech synthesized for text [{}]".format(text))
+    with open("./.recordings/viseme_data.json", "w", encoding="utf-8") as f:
+        json.dump(viseme, f, ensure_ascii=False, indent=2)
+
 elif speech_synthesis_result.reason == speechsdk.ResultReason.Canceled:
     cancellation_details = speech_synthesis_result.cancellation_details
     print("Speech synthesis canceled: {}".format(cancellation_details.reason))
