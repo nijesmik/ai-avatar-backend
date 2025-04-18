@@ -22,18 +22,18 @@ class AudioTrack(MediaStreamTrack):
         self.time_base = Fraction(1, sample_rate)
         self.samples_per_frame = samples_per_frame
 
-        self._streamed = None
-        self._start = None
+        self._streamed_at = None
+        self._started_at = None
         self._timestamp = 0
 
     async def sleep(self):
-        if self._start:
+        if self._started_at:
             self._timestamp += self.samples_per_frame
-            wait = self._start + (self._timestamp / self.sample_rate) - time()
+            wait = self._started_at + (self._timestamp / self.sample_rate) - time()
             if wait > 0:
                 await asyncio.sleep(wait)
         else:
-            self._start = time()
+            self._started_at = time()
 
     def create_frame(self, pcm: ndarray) -> AudioFrame:
         frame = AudioFrame.from_ndarray(pcm.reshape(1, -1), format="s16", layout="mono")
@@ -65,16 +65,16 @@ class AudioTrack(MediaStreamTrack):
 
     @property
     def start_time(self) -> float:
-        return self._streamed or self._start or time()
+        return self._streamed_at or self._started_at or time()
 
     @start_time.setter
     def start_time(self, start_time: float):
-        self._streamed = start_time
+        self._streamed_at = start_time
 
     @property
     def offset(self) -> int:
-        if self._streamed and self._start:
-            offset = int((self._start - self._streamed) * 48000)
+        if self._streamed_at and self._started_at:
+            offset = int((self._started_at - self._streamed_at) * 48000)
             if offset > 0:
                 return offset
         return 0
