@@ -32,20 +32,15 @@ class PeerConnection(RTCPeerConnection):
 
     async def tts(self, text: str):
         tts = TTSAudioTrack(text, self.send_viseme)
-        self.add_tts_track(tts)
+        self.replace_track(tts)
         await tts.run_synthesis()
 
-    async def add_tts_track(self, tts: TTSAudioTrack):
-        self.addTrack(tts)
-        await self.sio.emit("renegotiate", to=self.sid)
 
-    async def replace_tts_track(self, tts: TTSAudioTrack):
+    def replace_track(self, track: AudioTrack):
         old_track: AudioTrack = self.sender.track
-        tts.start_time = old_track.start_time
-        self.sender.replaceTrack(tts)
-
-        if old_track:
-            old_track.stop()
+        track.start_time = old_track.start_time
+        self.sender.replaceTrack(track)
+        old_track.stop()
 
     def send_viseme(self, event: SpeechSynthesisVisemeEventArgs):
         asyncio.run_coroutine_threadsafe(
