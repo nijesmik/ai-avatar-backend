@@ -22,18 +22,18 @@ class AudioTrack(MediaStreamTrack):
         self.time_base = Fraction(1, sample_rate)
         self.samples_per_frame = samples_per_frame
 
-        self._streamed_at = None
-        self._started_at = None
+        self._stream_start = None
+        self._audio_start = None
         self._timestamp = 0
 
     async def sleep(self):
-        if self._started_at:
+        if self._audio_start:
             self._timestamp += self.samples_per_frame
-            wait = self._started_at + (self._timestamp / self.sample_rate) - time()
+            wait = self._audio_start + (self._timestamp / self.sample_rate) - time()
             if wait > 0:
                 await asyncio.sleep(wait)
         else:
-            self._started_at = time()
+            self.audio_start = time()
 
     def create_frame(self, pcm: ndarray) -> AudioFrame:
         frame = AudioFrame.from_ndarray(pcm.reshape(1, -1), format="s16", layout="mono")
@@ -64,17 +64,37 @@ class AudioTrack(MediaStreamTrack):
         self.time_base = Fraction(1, sample_rate)
 
     @property
-    def start_time(self) -> float:
-        return self._streamed_at or self._started_at or time()
-
-    @start_time.setter
-    def start_time(self, start_time: float):
-        self._streamed_at = start_time
+    def offset(self) -> int:
+        offset = int((self.audio_start - self.stream_start) * 48000)
+        if offset > 0:
+            return offset
+        return 0
 
     @property
-    def offset(self) -> int:
-        if self._streamed_at and self._started_at:
-            offset = int((self._started_at - self._streamed_at) * 48000)
-            if offset > 0:
-                return offset
+    def stream_start(self):
+        if self._stream_start:
+            return self._stream_start
         return 0
+
+    @stream_start.setter
+    def stream_start(self, stream_start: float):
+        self._stream_start = stream_start
+
+    @property
+    def audio_start(self):
+        if self._audio_start:
+            return self._audio_start
+        return 0
+
+    @audio_start.setter
+    def audio_start(self, audio_start: float):
+        self._audio_start = audio_start
+        if self._stream_start is None:
+            self._stream_start = audio_start
+
+    async def reset_audio(self):
+        self.event.set()
+        self._audio_start = None
+        self._timestamp = 0
+        await self.event.wait()
+        self.event.clear()

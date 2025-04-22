@@ -2,6 +2,7 @@ import asyncio
 import logging
 from array import array
 from os import getenv
+from typing import AsyncIterator
 
 import azure.cognitiveservices.speech as speechsdk
 import numpy as np
@@ -15,11 +16,11 @@ logger.setLevel(logging.DEBUG)
 
 
 class TTSAudioTrack(AudioTrack):
-    def __init__(self, text: str, viseme_callback):
+    def __init__(self, on_viseme_received):
         super().__init__()
-        self.text = text
         self.queue = asyncio.Queue()
         self.buffer = array("h")
+        self.is_pending = True
 
         self.speech_config = speechsdk.SpeechConfig(
             subscription=getenv("AZURE_SPEECH_KEY"),
@@ -30,9 +31,13 @@ class TTSAudioTrack(AudioTrack):
             speechsdk.SpeechSynthesisOutputFormat.Raw48Khz16BitMonoPcm
         )
 
-        self.viseme_callback = viseme_callback
+        self.viseme_callback = on_viseme_received
+        self.stream_callback = StreamCallback(self.queue)
 
     async def recv(self):
+        if self.is_pending:
+            logger.debug("💡 TTS is done")
+            await self.event.wait()
         pcm = await self.get_pcm(self.samples_per_frame)
         await self.sleep()
         return self.create_frame(pcm)
@@ -41,6 +46,7 @@ class TTSAudioTrack(AudioTrack):
         while len(self.buffer) < size:
             chunk = await self.queue.get()
             if chunk is None:
+                self.is_pending = True
                 break
             self.buffer.extend(array("h", chunk))
 
@@ -53,16 +59,24 @@ class TTSAudioTrack(AudioTrack):
 
         return np.frombuffer(memoryview(pcm), dtype=np.int16)
 
-    async def run_synthesis(self):
-        audio_stream = speechsdk.audio.PushAudioOutputStream(_Callback(self.queue))
+    async def run_synthesis(self, response: AsyncIterator[str]):
+        await self.reset_audio()
+        self.is_pending = False
+
+        async for chunk in response:
+            await self._run_synthesis_once(chunk)
+        await self.queue.put(None)
+
+    async def _run_synthesis_once(self, text: str):
+        audio_stream = speechsdk.audio.PushAudioOutputStream(self.stream_callback)
         audio_config = speechsdk.audio.AudioOutputConfig(stream=audio_stream)
         synthesizer = speechsdk.SpeechSynthesizer(self.speech_config, audio_config)
         synthesizer.viseme_received.connect(self.viseme_callback)
-        future = synthesizer.speak_text_async(self.text)
+        future = synthesizer.speak_text_async(text)
         result = await asyncio.to_thread(future.get)
 
         if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-            logger.debug("Speech synthesized for text [{}]".format(self.text))
+            logger.debug("Speech synthesized for text [{}]".format(text))
         elif result.reason == speechsdk.ResultReason.Canceled:
             cancellation_details = result.cancellation_details
             logger.info(
@@ -75,7 +89,7 @@ class TTSAudioTrack(AudioTrack):
                     )
 
 
-class _Callback(speechsdk.audio.PushAudioOutputStreamCallback):
+class StreamCallback(speechsdk.audio.PushAudioOutputStreamCallback):
     def __init__(self, queue: asyncio.Queue, debug=False):
         super().__init__()
         self.queue = queue
@@ -95,7 +109,8 @@ class _Callback(speechsdk.audio.PushAudioOutputStreamCallback):
         return len(audio_buffer)
 
     def close(self):
-        asyncio.run_coroutine_threadsafe(self.queue.put(None), self.loop)
+        # asyncio.run_coroutine_threadsafe(self.queue.put(None), self.loop)
+        logger.debug("🚪 TTS stream closed")
 
         if self.debug:
             self.wav.close()

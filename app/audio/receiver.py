@@ -7,7 +7,9 @@ from aiortc.rtcrtpreceiver import RemoteStreamTrack
 
 from app.audio.resample import resample_to_16k
 from app.audio.stt import STTService
+from app.audio.tts import TTSAudioTrack
 from app.audio.utils import save_as_wav
+from app.service.chat import ChatService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -18,19 +20,19 @@ BYTES_PER_SECOND = BYTES_PER_MS * 1000
 
 
 class AudioReceiver:
-    vad = webrtcvad.Vad(3)
-
-    def __init__(self, track: RemoteStreamTrack, sid, tts_callback):
+    def __init__(self, track: RemoteStreamTrack, sid, tts_track: TTSAudioTrack):
         super().__init__()
         self.track = track
         self.sid = sid
-        self.run_tts = tts_callback
 
+        self.vad = webrtcvad.Vad(3)
         self.in_speech = False
         self.speech_count = 0
         self.queue = asyncio.Queue()
 
         self.response_task = None
+        self.chat_service = ChatService()
+        self.tts_service = tts_track
 
     async def recv(self):
         try:
@@ -53,17 +55,22 @@ class AudioReceiver:
         is_speech = self.vad.is_speech(chunk, 16000)
 
         if is_speech:
-            if not self.in_speech and self.response_task is None:
+            if not self.in_speech:
                 logger.debug("🟢 발화 시작")
                 self.in_speech = True
                 self.queue = asyncio.Queue()
+
+            if (
+                self.response_task is None
+                and self.queue.qsize() > 10  # 20ms * 10 = 200ms
+            ):
                 self.response_task = asyncio.create_task(self.create_response())
 
             await self.add_to_queue(pcm)
 
         elif self.in_speech:
             self.speech_count += 1
-            if self.speech_count > 50:  # 50 * 20ms = 1s
+            if self.speech_count > 40:  # 40 * 20ms = 800ms
                 logger.debug("🔴 발화 종료")
                 await self.add_to_queue(None)
                 self.in_speech = False
@@ -118,8 +125,17 @@ class AudioReceiver:
                 seq_id += 1
 
     async def create_response(self):
+        logger.debug("🟣 응답 생성 시작")
         text = await STTService(self.generate_pcm_iter()).run()
         logger.info(f"🗣️  STT 결과: {text}")
+
+        try:
+            if text:
+                await self.tts_service.run_synthesis(
+                    self.chat_service.send_utterance(text)
+                )
+        finally:
+            self.response_task = None
 
     async def cancel(self):
         self.track.stop()
