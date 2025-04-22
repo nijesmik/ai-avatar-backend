@@ -68,4 +68,7 @@ class STTService:
         finally:
             await channel.close()  # 작업이 끝나면 채널 닫기
 
+        if not stt[-1].endswith((".", "!", "?")):
+            stt[-1] += "."
+
         return "".join(stt)
