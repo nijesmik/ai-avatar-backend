@@ -8,8 +8,9 @@ import azure.cognitiveservices.speech as speechsdk
 import numpy as np
 
 from app.audio.track import AudioTrack
-from app.audio.tts_voice import AzureTTSVoiceKorean
-from app.audio.utils import WavFileWriter
+
+from .callback import StreamCallback
+from .voice import SynthesisVoiceKorean
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -26,7 +27,7 @@ class TTSAudioTrack(AudioTrack):
             subscription=getenv("AZURE_SPEECH_KEY"),
             region=getenv("AZURE_SPEECH_REGION"),
         )
-        self.speech_config.speech_synthesis_voice_name = AzureTTSVoiceKorean.InJoon
+        self.speech_config.speech_synthesis_voice_name = SynthesisVoiceKorean.InJoon
         self.speech_config.set_speech_synthesis_output_format(
             speechsdk.SpeechSynthesisOutputFormat.Raw48Khz16BitMonoPcm
         )
@@ -87,30 +88,3 @@ class TTSAudioTrack(AudioTrack):
                     logger.error(
                         "Error details: {}".format(cancellation_details.error_details)
                     )
-
-
-class StreamCallback(speechsdk.audio.PushAudioOutputStreamCallback):
-    def __init__(self, queue: asyncio.Queue, debug=False):
-        super().__init__()
-        self.queue = queue
-        self.loop = asyncio.get_running_loop()
-        self.debug = debug
-        self.wav = None
-        if debug:
-            self.wav = WavFileWriter(path_prefix="original")
-
-    def write(self, audio_buffer: memoryview) -> int:
-        chunk = audio_buffer.tobytes()
-        asyncio.run_coroutine_threadsafe(self.queue.put(chunk), self.loop)
-
-        if self.debug:
-            self.wav.write(chunk)
-
-        return len(audio_buffer)
-
-    def close(self):
-        # asyncio.run_coroutine_threadsafe(self.queue.put(None), self.loop)
-        logger.debug("🚪 TTS stream closed")
-
-        if self.debug:
-            self.wav.close()

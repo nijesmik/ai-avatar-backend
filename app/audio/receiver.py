@@ -6,10 +6,10 @@ from aiortc.mediastreams import MediaStreamError
 from aiortc.rtcrtpreceiver import RemoteStreamTrack
 
 from app.audio.resample import resample_to_16k
-from app.audio.tts import TTSAudioTrack
 from app.audio.utils import save_as_wav
 from app.service.chat import ChatService
 from app.service.stt import STTService
+from app.service.tts import TTSAudioTrack
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

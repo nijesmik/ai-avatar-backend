@@ -6,7 +6,7 @@ from azure.cognitiveservices.speech import SpeechSynthesisVisemeEventArgs
 from socketio import AsyncServer
 
 from app.audio.receiver import AudioReceiver
-from app.audio.tts import TTSAudioTrack
+from app.service.tts import TTSAudioTrack
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

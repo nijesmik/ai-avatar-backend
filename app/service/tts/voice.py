@@ -1,7 +1,7 @@
 from enum import Enum
 
 
-class AzureTTSVoiceKorean(str, Enum):
+class SynthesisVoiceKorean(str, Enum):
     SunHi = "ko-KR-SunHiNeural"  # 여성
     InJoon = "ko-KR-InJoonNeural"  # 남성
     HyunsuMultilingual = "ko-KR-HyunsuMultilingualNeural"  # 남성
