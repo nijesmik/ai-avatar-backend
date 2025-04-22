@@ -6,10 +6,10 @@ from aiortc.mediastreams import MediaStreamError
 from aiortc.rtcrtpreceiver import RemoteStreamTrack
 
 from app.audio.resample import resample_to_16k
-from app.audio.stt import STTService
 from app.audio.tts import TTSAudioTrack
 from app.audio.utils import save_as_wav
 from app.service.chat import ChatService
+from app.service.stt import STTService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -31,6 +31,7 @@ class AudioReceiver:
         self.queue = asyncio.Queue()
 
         self.response_task = None
+        self.stt_service = STTService()
         self.chat_service = ChatService()
         self.tts_service = tts_track
 
@@ -126,7 +127,7 @@ class AudioReceiver:
 
     async def create_response(self):
         logger.debug("🟣 응답 생성 시작")
-        text = await STTService(self.generate_pcm_iter()).run()
+        text = await self.stt_service.run(self.generate_pcm_iter())
         logger.info(f"🗣️  STT 결과: {text}")
 
         try:

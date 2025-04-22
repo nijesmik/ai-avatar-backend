@@ -14,8 +14,8 @@ logger.setLevel(logging.DEBUG)
 class STTService:
     _METADATA = (("authorization", f"Bearer {getenv("CLOVA_SPEECH_SECRET_KEY")}"),)
 
-    def __init__(self, pcm_iter):
-        self._pcm_iter = pcm_iter
+    def __init__(self):
+        self._pcm_iter = None
 
     async def _generate_requests(self):
         yield nest_pb2.NestRequest(
@@ -35,7 +35,9 @@ class STTService:
                 ),
             )
 
-    async def run(self):
+    async def run(self, pcm_iter):
+        self._pcm_iter = pcm_iter
+
         channel = grpc.aio.secure_channel(
             "clovaspeech-gw.ncloud.com:50051", grpc.ssl_channel_credentials()
         )
