@@ -2,7 +2,7 @@ import numpy as np
 from scipy.signal import resample_poly
 
 
-def resample_to_16k(pcm_48k: bytes) -> bytes:
+def resample_to_16k(pcm_48k: memoryview) -> bytes:
     # stereo, 48kHz, 16bit PCM → numpy 배열
     audio_np = np.frombuffer(pcm_48k, dtype=np.int16).reshape(-1, 2)
 

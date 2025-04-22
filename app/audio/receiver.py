@@ -36,7 +36,7 @@ class AudioReceiver:
         try:
             while True:
                 frame = await self.track.recv()
-                pcm_48k = bytes(frame.planes[0])
+                pcm_48k = memoryview(frame.planes[0])
                 pcm_16k = resample_to_16k(pcm_48k)
                 await self.detect_speech(pcm_16k)
 
