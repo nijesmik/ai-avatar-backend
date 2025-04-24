@@ -21,7 +21,8 @@ class TTSAudioTrack(AudioTrack):
         super().__init__()
         self.queue = asyncio.Queue()
         self.buffer = array("h")
-        self.is_pending = True
+        self.is_pending = asyncio.Event()
+        self.is_pending.set()
 
         self.speech_config = speechsdk.SpeechConfig(
             subscription=getenv("AZURE_SPEECH_KEY"),
@@ -36,7 +37,7 @@ class TTSAudioTrack(AudioTrack):
         self.stream_callback = StreamCallback(self.queue)
 
     async def recv(self):
-        if self.is_pending:
+        if self.is_pending.is_set():
             logger.debug("💡 TTS is done")
             await self.event.wait()
         pcm = await self.get_pcm(self.samples_per_frame)
@@ -47,7 +48,7 @@ class TTSAudioTrack(AudioTrack):
         while len(self.buffer) < size:
             chunk = await self.queue.get()
             if chunk is None:
-                self.is_pending = True
+                self.is_pending.set()
                 break
             self.buffer.extend(array("h", chunk))
 
@@ -62,11 +63,12 @@ class TTSAudioTrack(AudioTrack):
 
     async def run_synthesis(self, response: AsyncIterator[str]):
         await self.reset_audio()
-        self.is_pending = False
+        self.is_pending.clear()
 
         async for chunk in response:
             await self._run_synthesis_once(chunk)
         await self.queue.put(None)
+        await self.is_pending.wait()
 
     async def _run_synthesis_once(self, text: str):
         audio_stream = speechsdk.audio.PushAudioOutputStream(self.stream_callback)
