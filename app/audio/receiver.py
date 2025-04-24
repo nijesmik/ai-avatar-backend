@@ -20,7 +20,13 @@ BYTES_PER_SECOND = BYTES_PER_MS * 1000
 
 
 class AudioReceiver:
-    def __init__(self, track: RemoteStreamTrack, sid, tts_track: TTSAudioTrack):
+    def __init__(
+        self,
+        track: RemoteStreamTrack,
+        sid,
+        tts_track: TTSAudioTrack,
+        stt_service: STTService,
+    ):
         super().__init__()
         self.track = track
         self.sid = sid
@@ -31,7 +37,7 @@ class AudioReceiver:
         self.queue = asyncio.Queue()
 
         self.response_task = None
-        self.stt_service = STTService()
+        self.stt_service = stt_service
         self.chat_service = ChatService()
         self.tts_service = tts_track
 

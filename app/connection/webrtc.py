@@ -6,6 +6,7 @@ from azure.cognitiveservices.speech import SpeechSynthesisVisemeEventArgs
 from socketio import AsyncServer
 
 from app.audio.receiver import AudioReceiver
+from app.service.stt import STTService
 from app.service.tts import TTSAudioTrack
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ class PeerConnection(RTCPeerConnection):
         super().__init__()
         self.sid = sid
         self.sio = sio
-        self.tts_track = TTSAudioTrack(self.send_viseme)
+        self.tts_track = TTSAudioTrack(self.emit_viseme)
         self.sender = self.addTrack(self.tts_track)
         self.audio_receiver = None
         self.recv_task = None
@@ -27,10 +28,23 @@ class PeerConnection(RTCPeerConnection):
         if self.audio_receiver:
             return
 
-        self.audio_receiver = AudioReceiver(track, self.sid, self.tts_track)
+        stt_service = STTService(self.emit_stt_message)
+        self.audio_receiver = AudioReceiver(track, self.sid, self.tts_track, stt_service)
         self.recv_task = asyncio.create_task(self.audio_receiver.recv())
 
-    def send_viseme(self, event: SpeechSynthesisVisemeEventArgs):
+    async def emit_stt_message(self, stt_result: str):
+        await self.sio.emit(
+            "message",
+            {
+                "role": "user",
+                "content": {
+                    "text": stt_result,
+                },
+            },
+            to=self.sid,
+        )
+
+    def emit_viseme(self, event: SpeechSynthesisVisemeEventArgs):
         asyncio.run_coroutine_threadsafe(
             self.sio.emit(
                 "viseme",

@@ -3,6 +3,8 @@ import logging
 from os import getenv
 
 import grpc.aio
+from google import genai
+from google.genai import types
 
 import nest_pb2
 import nest_pb2_grpc
@@ -13,15 +15,26 @@ logger.setLevel(logging.DEBUG)
 
 class STTService:
     _METADATA = (("authorization", f"Bearer {getenv("CLOVA_SPEECH_SECRET_KEY")}"),)
+    client = genai.Client(api_key=getenv("GEMINI_API_KEY"))
 
-    def __init__(self):
+    def __init__(self, on_finished):
         self._pcm_iter = None
+        self.finished_callback = on_finished
 
     async def _generate_requests(self):
         yield nest_pb2.NestRequest(
             type=nest_pb2.RequestType.CONFIG,
             config=nest_pb2.NestConfig(
-                config=json.dumps({"transcription": {"language": "ko"}})
+                config=json.dumps(
+                    {
+                        "transcription": {
+                            "language": "ko",
+                        },
+                        "semanticEpd": {
+                            "usePeriodEpd": True,
+                        },
+                    }
+                )
             ),
         )
 
@@ -43,7 +56,7 @@ class STTService:
         )
         stub = nest_pb2_grpc.NestServiceStub(channel)
 
-        stt = []
+        buffer = []
 
         try:
             # 서버로부터 응답을 반복 처리
@@ -59,7 +72,7 @@ class STTService:
 
                 text = transcription.get("text")
                 if text:
-                    stt.append(text)
+                    buffer.append(text)
                     logger.debug(f"🔹 Partial: {text}")
                 else:
                     logger.info(f"response: {content}")
@@ -70,7 +83,21 @@ class STTService:
         finally:
             await channel.close()  # 작업이 끝나면 채널 닫기
 
-        if not stt[-1].endswith((".", "!", "?")):
-            stt[-1] += "."
+        result = await self.correct_text("".join(buffer))
+        await self.finished_callback(result)
+        return result
 
-        return "".join(stt)
+    async def correct_text(self, result: str):
+        response = await self.client.aio.models.generate_content(
+            model="gemini-2.0-flash-lite",
+            contents=result,
+            config=types.GenerateContentConfig(
+                system_instruction=[
+                    "문장의 오타를 수정하고, 문장이 끝나면 어울리는 문장 부호(마침표, 물음표, 느낌표 등)를 자연스럽게 추가해 주세요.",
+                    "존댓말과 반말 등 말투는 그대로 유지해 주세요.",
+                    "문장을 바꾸거나 해석하지 말고, 최대한 원래 의미를 유지해 주세요.",
+                ]
+            ),
+        )
+
+        return response.text.strip()
