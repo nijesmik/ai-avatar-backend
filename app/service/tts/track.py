@@ -10,6 +10,7 @@ import numpy as np
 from app.audio.track import AudioTrack
 
 from .callback import StreamCallback
+from .viseme import Viseme
 from .voice import SynthesisVoiceKorean
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,7 @@ class TTSAudioTrack(AudioTrack):
 
         async for chunk in response:
             await self._run_synthesis_once(chunk)
+            self.viseme_callback(Viseme(animation="", audio_offset=0, viseme_id=-1))
         await self.queue.put(None)
         await self.is_pending.wait()
 
