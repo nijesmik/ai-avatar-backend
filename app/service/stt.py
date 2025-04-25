@@ -83,8 +83,9 @@ class STTService:
         finally:
             await channel.close()  # 작업이 끝나면 채널 닫기
 
-        result = await self.correct_text("".join(buffer))
-        await self.finished_callback(result)
+        result = "".join(buffer)
+        if result:
+            await self.finished_callback(result)
         return result
 
     async def correct_text(self, result: str):

@@ -4,6 +4,7 @@ import logging
 from aiortc import RTCPeerConnection
 from azure.cognitiveservices.speech import SpeechSynthesisVisemeEventArgs
 from socketio import AsyncServer
+from time import time
 
 from app.audio.receiver import AudioReceiver
 from app.service.stt import STTService
@@ -39,7 +40,9 @@ class PeerConnection(RTCPeerConnection):
                 "role": "user",
                 "content": {
                     "text": stt_result,
+                    "type": "speech",
                 },
+                "time": int(time() * 1000),
             },
             to=self.sid,
         )
