@@ -51,16 +51,19 @@ class TTSAudioTrack(AudioTrack):
             if chunk is None:
                 self.is_pending.set()
                 break
-            self.buffer.extend(array("h", chunk))
+            self.buffer.frombytes(chunk)
 
-        pcm = array("h", self.buffer[:size])
-        del self.buffer[:size]
+        read_size = min(len(self.buffer), size)
+        view = np.frombuffer(self.buffer, dtype=np.int16)
+        pcm = view[:read_size].copy()
+        self.buffer = array("h", memoryview(self.buffer)[read_size:])
 
-        padding = size - len(pcm)
-        if padding > 0:
-            pcm.extend(array("h", (0 for _ in range(padding))))
+        if read_size < size:
+            padded = np.zeros(size, dtype=np.int16)
+            padded[:read_size] = pcm
+            return padded
 
-        return np.frombuffer(memoryview(pcm), dtype=np.int16)
+        return pcm
 
     async def run_synthesis(self, response: AsyncIterator[str]):
         await self.reset_audio()

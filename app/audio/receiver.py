@@ -91,10 +91,11 @@ class AudioReceiver:
         target_size = desired_ms * BYTES_PER_MS
 
         if len(pcm) >= target_size:
-            return pcm[:target_size]
-        else:
-            # 부족하면 zero-padding
-            return pcm + bytes(target_size - len(pcm))
+            return memoryview(pcm)[:target_size]
+
+        chunk = bytearray(target_size)
+        chunk[:len(pcm)] = pcm
+        return chunk
 
     async def generate_pcm_iter(self):
         seq_id = 0
