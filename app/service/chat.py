@@ -17,8 +17,6 @@ Please follow these rules when generating your response:
 3. Avoid slang, abbreviations, or foreign words that might confuse speech synthesis.
 4. Use proper punctuation like commas and periods for natural rhythm.
 5. The response will be spoken using text-to-speech (TTS), so make sure all words are clearly pronounceable.
-
-Please respond naturally with 2 to 4 well-formed sentences — not too short, not too long.
 """
 
 
@@ -26,7 +24,7 @@ class ChatService:
     client = genai.Client(api_key=getenv("GEMINI_API_KEY"))
     regex = re.compile(r"(.*?[\.!?])(\s+|$)")
 
-    def __init__(self, model: str = "gemini-2.0-flash-lite"):
+    def __init__(self, model: str = "gemini-2.0-flash"):
         self.chat = self.client.aio.chats.create(model=model)
 
     async def send_message(self, message: str):
@@ -38,7 +36,7 @@ class ChatService:
             logger.debug(f"💬 text: {chunk.text}")
             yield chunk.text
 
-    async def send_utterance(self, utterance: str):
+    async def send_utterance_stream(self, utterance: str):
         response = await self.chat.send_message_stream(
             utterance,
             config={
@@ -66,3 +64,14 @@ class ChatService:
 
             yield match.group(1)
             buffer = buffer[match.end() :]
+
+    async def send_utterance(self, utterance: str):
+        response = await self.chat.send_message(
+            utterance,
+            config={
+                "system_instruction": system_instruction,
+            },
+        )
+
+        logger.debug(f"💬 text: {response.text}")
+        yield response.text
