@@ -6,8 +6,7 @@ import grpc.aio
 from google import genai
 from google.genai import types
 
-import nest_pb2
-import nest_pb2_grpc
+from . import nest_pb2, nest_pb2_grpc
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
