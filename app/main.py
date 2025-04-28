@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from app.connection.websocket import SocketEventHandler
+from app.routers import health
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,6 +16,8 @@ allowed_origins = getenv("ALLOWED_ORIGINS", "*").split(",")
 logger.info(f"Allowed origins: {allowed_origins}")
 
 app = FastAPI()
+app.include_router(health.router, prefix="/v1/health")
+
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=allowed_origins)
 
 handler = SocketEventHandler(sio)
