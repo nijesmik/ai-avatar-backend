@@ -4,6 +4,7 @@ from os import getenv
 import socketio
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.connection.websocket import SocketEventHandler
 from app.routers import health
@@ -16,6 +17,15 @@ allowed_origins = getenv("ALLOWED_ORIGINS", "*").split(",")
 logger.info(f"Allowed origins: {allowed_origins}")
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(health.router, prefix="/v1/health")
 
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=allowed_origins)
