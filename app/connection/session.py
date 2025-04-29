@@ -4,56 +4,70 @@ import logging
 from socketio import AsyncServer
 
 from app.connection.webrtc import PeerConnection
+from app.service.chat import ChatService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class PeerConnectionManager:
+class SessionManager:
     def __init__(self, sio: AsyncServer):
         self.sio = sio
-        self.peer_connections = {}
+        self.sessions = {}
         self.lock = asyncio.Lock()
 
-    async def add(self, sid, pc: PeerConnection):
+    async def add(self, sid):
         async with self.lock:
-            self.peer_connections[sid] = pc
+            self.sessions[sid] = Session(sid, self.sio)
 
-    async def get(self, sid) -> PeerConnection | None:
+    async def get(self, sid) -> "Session" | None:
         async with self.lock:
-            return self.peer_connections.get(sid, None)
+            return self.sessions.get(sid, None)
 
     async def remove(self, sid):
         async with self.lock:
-            pc = self.peer_connections.pop(sid, None)
+            session = self.sessions.pop(sid, None)
+            session.remove_peer_connection()
 
+
+class Session:
+    def __init__(self, sid, sio: AsyncServer):
+        super().__init__()
+        self.sid = sid
+        self.sio = sio
+        self.chat = ChatService()
+        self.peer_connection: PeerConnection = None
+
+    async def remove_peer_connection(self):
+        pc = self.peer_connection
         if not pc:
             return
 
         if pc.recv_task:
             pc.recv_task.cancel()
             try:
-                logger.debug(f"🟡 AudioReceiver 종료 대기: {sid}")
+                logger.debug(f"🟡 AudioReceiver 종료 대기: {self.sid}")
                 await pc.recv_task
             except asyncio.CancelledError:
                 pass
 
         await pc.close()
-        logger.info(f"❌ PeerConnection 종료: {sid}")
+        logger.info(f"❌ PeerConnection 종료: {self.sid}")
 
-    async def create(self, sid):
-        pc = PeerConnection(sid, self.sio)
+    def create_peer_connection(self):
+        pc = PeerConnection(self.sid, self.sio)
+        self.peer_connection = pc
 
         @pc.on("track")
         async def on_track(track):
-            logger.debug(f"📥 Track 수신: {track.kind} - {sid}")
+            logger.debug(f"📥 Track 수신: {track.kind} - {self.sid}")
             if track.kind == "audio":
                 pc.set_audio_receiver(track)
 
         @pc.on("connectionstatechange")
         async def on_connectionstatechange():
             if pc.connectionState in ["disconnected", "failed", "closed"]:
-                await self.remove(sid)
+                await self.remove_peer_connection()
 
         @pc.on("icecandidate")
         async def on_icecandidate(event):
@@ -66,8 +80,5 @@ class PeerConnectionManager:
                         "sdpMid": candidate.sdpMid,
                         "sdpMLineIndex": candidate.sdpMLineIndex,
                     },
-                    to=sid,
+                    to=self.sid,
                 )
-
-        await self.add(sid, pc)
-        return pc
