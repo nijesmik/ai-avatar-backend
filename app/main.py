@@ -1,20 +1,16 @@
 import logging
-from os import getenv
 
 import socketio
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import allowed_origins
 from app.connection.websocket import SocketEventHandler
 from app.routers import health
+from app.websocket import sio
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-load_dotenv()
-allowed_origins = getenv("ALLOWED_ORIGINS", "*").split(",")
-logger.info(f"Allowed origins: {allowed_origins}")
 
 app = FastAPI()
 
@@ -27,8 +23,6 @@ app.add_middleware(
 )
 
 app.include_router(health.router, prefix="/v1/health")
-
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=allowed_origins)
 
 handler = SocketEventHandler(sio)
 
