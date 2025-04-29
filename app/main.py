@@ -5,9 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import allowed_origins
-from app.connection.websocket import SocketEventHandler
 from app.routers import health
-from app.websocket import sio
+from app.websocket import SocketEventHandler, sio
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
