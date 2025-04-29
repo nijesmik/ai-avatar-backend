@@ -8,6 +8,7 @@ import azure.cognitiveservices.speech as speechsdk
 import numpy as np
 
 from app.audio.track import AudioTrack
+from app.websocket import sio as socket
 
 from .callback import StreamCallback
 from .viseme import Viseme
@@ -18,8 +19,11 @@ logger.setLevel(logging.DEBUG)
 
 
 class TTSAudioTrack(AudioTrack):
-    def __init__(self, on_viseme_received):
+    def __init__(self, sid):
         super().__init__()
+        self.sid = sid
+        self.loop = asyncio.get_running_loop()
+
         self.queue = asyncio.Queue()
         self.buffer = array("h")
         self.is_pending = asyncio.Event()
@@ -34,7 +38,6 @@ class TTSAudioTrack(AudioTrack):
             speechsdk.SpeechSynthesisOutputFormat.Raw48Khz16BitMonoPcm
         )
 
-        self.viseme_callback = on_viseme_received
         self.stream_callback = StreamCallback(self.queue)
 
     async def recv(self):
@@ -71,7 +74,7 @@ class TTSAudioTrack(AudioTrack):
 
         async for chunk in response:
             await self._run_synthesis_once(chunk)
-            self.viseme_callback(Viseme(animation="", audio_offset=0, viseme_id=-1))
+            self.emit_viseme(Viseme(animation="", audio_offset=0, viseme_id=-1))
         await self.queue.put(None)
         await self.is_pending.wait()
 
@@ -79,7 +82,7 @@ class TTSAudioTrack(AudioTrack):
         audio_stream = speechsdk.audio.PushAudioOutputStream(self.stream_callback)
         audio_config = speechsdk.audio.AudioOutputConfig(stream=audio_stream)
         synthesizer = speechsdk.SpeechSynthesizer(self.speech_config, audio_config)
-        synthesizer.viseme_received.connect(self.viseme_callback)
+        synthesizer.viseme_received.connect(self.emit_viseme)
         future = synthesizer.speak_text_async(text)
         result = await asyncio.to_thread(future.get)
 
@@ -95,3 +98,17 @@ class TTSAudioTrack(AudioTrack):
                     logger.error(
                         "Error details: {}".format(cancellation_details.error_details)
                     )
+
+    def emit_viseme(self, event: speechsdk.SpeechSynthesisVisemeEventArgs):
+        asyncio.run_coroutine_threadsafe(
+            socket.emit(
+                "viseme",
+                {
+                    "animation": event.animation,
+                    "audio_offset": event.audio_offset / 10000,
+                    "viseme_id": event.viseme_id,
+                },
+                to=self.sid,
+            ),
+            self.loop,
+        )

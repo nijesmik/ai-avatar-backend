@@ -7,9 +7,7 @@ from aiortc.rtcrtpreceiver import RemoteStreamTrack
 
 from app.audio.resample import resample_to_16k
 from app.audio.utils import save_as_wav
-from app.service.chat import ChatService
 from app.service.stt import STTService
-from app.service.tts import TTSAudioTrack
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -24,8 +22,7 @@ class AudioReceiver:
         self,
         track: RemoteStreamTrack,
         sid,
-        tts_track: TTSAudioTrack,
-        stt_service: STTService,
+        on_stt_finished,
     ):
         super().__init__()
         self.track = track
@@ -37,9 +34,8 @@ class AudioReceiver:
         self.queue = asyncio.Queue()
 
         self.response_task = None
-        self.stt_service = stt_service
-        self.chat_service = ChatService()
-        self.tts_service = tts_track
+        self.stt_service = STTService()
+        self.stt_finished_callback = on_stt_finished
 
     async def recv(self):
         try:
@@ -94,7 +90,7 @@ class AudioReceiver:
             return memoryview(pcm)[:target_size]
 
         chunk = bytearray(target_size)
-        chunk[:len(pcm)] = pcm
+        chunk[: len(pcm)] = pcm
         return chunk
 
     async def generate_pcm_iter(self):
@@ -139,9 +135,7 @@ class AudioReceiver:
 
         try:
             if text:
-                await self.tts_service.run_synthesis(
-                    self.chat_service.send_utterance(text)
-                )
+                await self.stt_finished_callback(text)
         finally:
             self.response_task = None
 

@@ -1,64 +1,49 @@
 import asyncio
 import logging
-from time import time
+import re
 
 from aiortc import RTCPeerConnection
-from azure.cognitiveservices.speech import SpeechSynthesisVisemeEventArgs
-from socketio import AsyncServer
 
 from app.audio.receiver import AudioReceiver
-from app.service.stt import STTService
+from app.service.chat import ChatService
 from app.service.tts import TTSAudioTrack
+from app.websocket.emit import emit_speech_message
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
 class PeerConnection(RTCPeerConnection):
-    def __init__(self, sid, sio: AsyncServer):
+    def __init__(self, sid, chat_service: ChatService):
         super().__init__()
         self.sid = sid
-        self.sio = sio
-        self.tts_track = TTSAudioTrack(self.emit_viseme)
+        self.chat_service = chat_service
+        self.tts_track = TTSAudioTrack(sid)
         self.sender = self.addTrack(self.tts_track)
         self.audio_receiver = None
         self.recv_task = None
-        self.loop = asyncio.get_running_loop()
 
     def set_audio_receiver(self, track):
         if self.audio_receiver:
             return
 
-        stt_service = STTService(self.emit_stt_message)
-        self.audio_receiver = AudioReceiver(
-            track, self.sid, self.tts_track, stt_service
-        )
+        self.audio_receiver = AudioReceiver(track, self.sid, self.create_tts_response)
         self.recv_task = asyncio.create_task(self.audio_receiver.recv())
 
-    async def emit_stt_message(self, stt_result: str):
-        await self.sio.emit(
-            "message",
-            {
-                "role": "user",
-                "content": {
-                    "text": stt_result,
-                    "type": "speech",
-                },
-                "time": int(time() * 1000),
-            },
-            to=self.sid,
-        )
+    async def create_tts_response(self, text: str):
+        tasks = []
+        task = asyncio.create_task(emit_speech_message(self.sid, "user", text))
+        tasks.append(task)
 
-    def emit_viseme(self, event: SpeechSynthesisVisemeEventArgs):
-        asyncio.run_coroutine_threadsafe(
-            self.sio.emit(
-                "viseme",
-                {
-                    "animation": event.animation,
-                    "audio_offset": event.audio_offset / 10000,
-                    "viseme_id": event.viseme_id,
-                },
-                to=self.sid,
-            ),
-            self.loop,
-        )
+        await self.tts_track.run_synthesis(self.generate_llm_response(text, tasks))
+
+        await asyncio.gather(*tasks)
+
+    async def generate_llm_response(self, text: str, tasks):
+        response = await self.chat_service.send_utterance(text)
+
+        task = asyncio.create_task(emit_speech_message(self.sid, "model", response))
+        if tasks:
+            tasks.append(task)
+
+        yield re.sub(r"([.!?])\s+", r"\1", response)

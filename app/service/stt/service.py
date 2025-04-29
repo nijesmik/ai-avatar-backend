@@ -16,9 +16,8 @@ class STTService:
     _METADATA = (("authorization", f"Bearer {getenv("CLOVA_SPEECH_SECRET_KEY")}"),)
     client = genai.Client(api_key=getenv("GEMINI_API_KEY"))
 
-    def __init__(self, on_finished):
+    def __init__(self):
         self._pcm_iter = None
-        self.finished_callback = on_finished
 
     async def _generate_requests(self):
         yield nest_pb2.NestRequest(
@@ -83,8 +82,6 @@ class STTService:
             await channel.close()  # 작업이 끝나면 채널 닫기
 
         result = "".join(buffer)
-        if result:
-            await self.finished_callback(result)
         return result
 
     async def correct_text(self, result: str):

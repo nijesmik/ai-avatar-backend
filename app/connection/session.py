@@ -10,26 +10,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class SessionManager:
-    def __init__(self, sio: AsyncServer):
-        self.sio = sio
-        self.sessions = {}
-        self.lock = asyncio.Lock()
-
-    async def add(self, sid):
-        async with self.lock:
-            self.sessions[sid] = Session(sid, self.sio)
-
-    async def get(self, sid) -> "Session" | None:
-        async with self.lock:
-            return self.sessions.get(sid, None)
-
-    async def remove(self, sid):
-        async with self.lock:
-            session = self.sessions.pop(sid, None)
-            session.remove_peer_connection()
-
-
 class Session:
     def __init__(self, sid, sio: AsyncServer):
         super().__init__()
@@ -55,7 +35,7 @@ class Session:
         logger.info(f"❌ PeerConnection 종료: {self.sid}")
 
     def create_peer_connection(self):
-        pc = PeerConnection(self.sid, self.sio)
+        pc = PeerConnection(self.sid, self.chat)
         self.peer_connection = pc
 
         @pc.on("track")
@@ -68,6 +48,7 @@ class Session:
         async def on_connectionstatechange():
             if pc.connectionState in ["disconnected", "failed", "closed"]:
                 await self.remove_peer_connection()
+                self.peer_connection = None
 
         @pc.on("icecandidate")
         async def on_icecandidate(event):
@@ -82,3 +63,23 @@ class Session:
                     },
                     to=self.sid,
                 )
+
+
+class SessionManager:
+    def __init__(self, sio: AsyncServer):
+        self.sio = sio
+        self.sessions = {}
+        self.lock = asyncio.Lock()
+
+    async def add(self, sid):
+        async with self.lock:
+            self.sessions[sid] = Session(sid, self.sio)
+
+    async def get(self, sid) -> Session | None:
+        async with self.lock:
+            return self.sessions.get(sid, None)
+
+    async def remove(self, sid):
+        async with self.lock:
+            session = self.sessions.pop(sid, None)
+            session.remove_peer_connection()

@@ -74,4 +74,4 @@ class ChatService:
         )
 
         logger.debug(f"💬 text: {response.text}")
-        yield response.text
+        return response.text
