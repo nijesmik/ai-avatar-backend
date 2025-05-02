@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from time import time
 
 import webrtcvad
 from aiortc.mediastreams import MediaStreamError
@@ -37,6 +38,8 @@ class AudioReceiver:
         self.stt_service = STTService()
         self.stt_finished_callback = on_stt_finished
 
+        self.speech_end_time = None
+
     async def recv(self):
         try:
             while True:
@@ -48,18 +51,12 @@ class AudioReceiver:
         except MediaStreamError:
             logger.info(f"❌ MediaStream 종료: {self.sid}")
 
-        except asyncio.CancelledError:
-            await self.cancel()
-            logger.info(f"❌ AudioReceiver 종료: {self.sid}")
-            raise
-
     async def detect_speech(self, pcm: bytes):
         chunk = self.get_chunk(pcm)
         is_speech = self.vad.is_speech(chunk, 16000)
 
         if is_speech:
             if not self.in_speech:
-                logger.debug("🟢 발화 시작")
                 self.in_speech = True
                 self.queue = asyncio.Queue()
 
@@ -74,7 +71,7 @@ class AudioReceiver:
         elif self.in_speech:
             self.speech_count += 1
             if self.speech_count > 40:  # 40 * 20ms = 800ms
-                logger.debug("🔴 발화 종료")
+                self.speech_end_time = time()
                 await self.add_to_queue(None)
                 self.in_speech = False
 
@@ -124,14 +121,14 @@ class AudioReceiver:
 
             buffer.extend(pcm)
 
-            if len(buffer) >= BYTES_PER_SECOND:
+            if len(buffer) >= BYTES_PER_SECOND / 4:
                 yield flush_buffer(buffer, seq_id)
                 seq_id += 1
 
     async def create_response(self):
         logger.debug("🟣 응답 생성 시작")
         text = await self.stt_service.run(self.generate_pcm_iter())
-        logger.info(f"🗣️  STT 결과: {text}")
+        logger.debug(f"🗣️  STT time: {(time() - self.speech_end_time) * 1000:.2f}ms")
 
         try:
             if text:
@@ -148,3 +145,5 @@ class AudioReceiver:
                 await self.response_task
             except asyncio.CancelledError:
                 logger.info(f"❌ 응답 생성 취소: {self.sid}")
+
+        await self.stt_service.close()

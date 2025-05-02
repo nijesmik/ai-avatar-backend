@@ -26,10 +26,12 @@ class Session:
         if pc.recv_task:
             pc.recv_task.cancel()
             try:
-                logger.debug(f"🟡 AudioReceiver 종료 대기: {self.sid}")
                 await pc.recv_task
             except asyncio.CancelledError:
                 pass
+            finally:
+                await pc.audio_receiver.cancel()
+                logger.info(f"❌ AudioReceiver 종료: {self.sid}")
 
         await pc.close()
         logger.info(f"❌ PeerConnection 종료: {self.sid}")
@@ -82,4 +84,4 @@ class SessionManager:
     async def remove(self, sid):
         async with self.lock:
             session = self.sessions.pop(sid, None)
-            session.remove_peer_connection()
+        await session.remove_peer_connection()

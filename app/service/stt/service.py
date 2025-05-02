@@ -17,10 +17,23 @@ class STTService:
     client = genai.Client(api_key=getenv("GEMINI_API_KEY"))
 
     def __init__(self):
-        self._pcm_iter = None
+        self.channel = grpc.aio.secure_channel(
+            "clovaspeech-gw.ncloud.com:50051", grpc.ssl_channel_credentials()
+        )
+        self.stub = nest_pb2_grpc.NestServiceStub(self.channel)
 
-    async def _generate_requests(self):
-        yield nest_pb2.NestRequest(
+    def __del__(self):
+        if self.channel:
+            self.channel.close()
+
+    async def close(self):
+        if self.channel:
+            await self.channel.close()
+            self.channel = None
+            logger.info("❌ gRPC channel closed")
+
+    def _generate_config(self):
+        return nest_pb2.NestRequest(
             type=nest_pb2.RequestType.CONFIG,
             config=nest_pb2.NestConfig(
                 config=json.dumps(
@@ -29,15 +42,19 @@ class STTService:
                             "language": "ko",
                         },
                         "semanticEpd": {
+                            "useWordEpd": True,
                             "usePeriodEpd": True,
+                            "gapThreshold": 2000,
                         },
                     }
                 )
             ),
         )
 
-        async for pcm, seq_id, ep_flag in self._pcm_iter:
-            logger.debug(f"seq_id: {seq_id}, ep_flag: {ep_flag}")
+    async def _generate_requests(self, pcm_iter):
+        yield self._generate_config()
+
+        async for pcm, seq_id, ep_flag in pcm_iter:
             yield nest_pb2.NestRequest(
                 type=nest_pb2.RequestType.DATA,
                 data=nest_pb2.NestData(
@@ -47,19 +64,12 @@ class STTService:
             )
 
     async def run(self, pcm_iter):
-        self._pcm_iter = pcm_iter
-
-        channel = grpc.aio.secure_channel(
-            "clovaspeech-gw.ncloud.com:50051", grpc.ssl_channel_credentials()
-        )
-        stub = nest_pb2_grpc.NestServiceStub(channel)
-
         buffer = []
 
         try:
             # 서버로부터 응답을 반복 처리
-            responses = stub.recognize(
-                self._generate_requests(), metadata=self._METADATA
+            responses = self.stub.recognize(
+                self._generate_requests(pcm_iter), metadata=self._METADATA
             )
             async for response in responses:
                 content = json.loads(response.contents)
@@ -71,15 +81,12 @@ class STTService:
                 text = transcription.get("text")
                 if text:
                     buffer.append(text)
-                    logger.debug(f"🔹 Partial: {text}")
                 else:
                     logger.info(f"response: {content}")
 
         except grpc.aio.AioRpcError as e:
             # gRPC 오류 처리
             logger.error(f"Error: {e.details()}")
-        finally:
-            await channel.close()  # 작업이 끝나면 채널 닫기
 
         result = "".join(buffer)
         return result
