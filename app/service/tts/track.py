@@ -33,7 +33,7 @@ class TTSAudioTrack(AudioTrack):
             subscription=getenv("AZURE_SPEECH_KEY"),
             region=getenv("AZURE_SPEECH_REGION"),
         )
-        self.speech_config.speech_synthesis_voice_name = SynthesisVoiceKorean.InJoon
+        self.set_voice("male")
         self.speech_config.set_speech_synthesis_output_format(
             speechsdk.SpeechSynthesisOutputFormat.Raw48Khz16BitMonoPcm
         )
@@ -112,3 +112,13 @@ class TTSAudioTrack(AudioTrack):
             ),
             self.loop,
         )
+
+    def set_voice(self, gender: str):
+        if gender == "male":
+            self.speech_config.speech_synthesis_voice_name = SynthesisVoiceKorean.InJoon
+            return
+        if gender == "female":
+            self.speech_config.speech_synthesis_voice_name = (
+                SynthesisVoiceKorean.SunHi
+            )
+            return

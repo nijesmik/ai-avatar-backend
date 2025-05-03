@@ -48,3 +48,12 @@ class SocketEventHandler:
         session = await self.session_manager.get(sid)
         if session.peer_connection:
             await session.peer_connection.addIceCandidate(candidate)
+
+    async def voice(self, sid, data):
+        session = await self.session_manager.get(sid)
+        if not session:
+            return
+        if not session.peer_connection:
+            return
+        session.peer_connection.tts_track.set_voice(data["gender"])
+        return {"status": "ok"}
