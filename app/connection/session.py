@@ -15,7 +15,7 @@ class Session:
         super().__init__()
         self.sid = sid
         self.sio = sio
-        self.chat = ChatService()
+        self.chat = ChatService(sid)
         self.voice = "male"
         self.peer_connection: PeerConnection = None
 

@@ -1,8 +1,13 @@
+import asyncio
 import logging
 import re
 from os import getenv
+from time import time
 
 from google import genai
+
+from app.util.time import log_time
+from app.websocket.emit import emit_speech_message
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -24,8 +29,10 @@ class ChatService:
     client = genai.Client(api_key=getenv("GEMINI_API_KEY"))
     regex = re.compile(r"(.*?[\.!?])(\s+|$)")
 
-    def __init__(self):
+    def __init__(self, sid):
         self.chat = self.create_voice_chat_model()
+        self.sid = sid
+        self._emit_task = None
 
     def create_voice_chat_model(self):
         return self.client.aio.chats.create(
@@ -45,20 +52,21 @@ class ChatService:
             yield chunk.text
 
     async def send_utterance_stream(self, utterance: str):
+        start_time = time()
         response = await self.chat.send_message_stream(utterance)
-
+        result = []
         buffer = ""
 
         async for chunk in response:
-            logger.debug(f"💬 text: {chunk.text}")
+            result.append(chunk.text)
             buffer += chunk.text
 
             match = self.regex.match(buffer)
-            if not match:
-                continue
-
-            yield match.group(1).strip()
-            buffer = buffer[match.end() :]
+            if match:
+                log_time(start_time, "LLM")
+                start_time = None
+                yield match.group(1).strip()
+                buffer = buffer[match.end() :]
 
         while buffer:
             match = self.regex.match(buffer)
@@ -68,6 +76,21 @@ class ChatService:
             yield match.group(1)
             buffer = buffer[match.end() :]
 
+        self._emit_task = asyncio.create_task(
+            emit_speech_message(self.sid, "model", "".join(result))
+        )
+
     async def send_utterance(self, utterance: str):
+        start_time = time()
         response = await self.chat.send_message(utterance)
+        log_time(start_time, "LLM")
+
+        self._emit_task = asyncio.create_task(
+            emit_speech_message(self.sid, "model", response.text)
+        )
         return response.text
+
+    async def wait_emit_task(self):
+        if self._emit_task:
+            await self._emit_task
+            self._emit_task = None
