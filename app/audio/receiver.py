@@ -147,5 +147,6 @@ class AudioReceiver:
         self.speech_end_time = time()
         self.in_speech = False
 
-        await self.response_task
-        self.response_task = None
+        if self.response_task:
+            await self.response_task
+            self.response_task = None
