@@ -15,7 +15,6 @@ from .viseme import Viseme
 from .voice import SynthesisVoiceKorean
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 class TTSAudioTrack(AudioTrack):
@@ -42,7 +41,6 @@ class TTSAudioTrack(AudioTrack):
 
     async def recv(self):
         if self.is_pending.is_set():
-            logger.debug("💡 TTS is done")
             await self.event.wait()
         pcm = await self.get_pcm(self.samples_per_frame)
         await self.sleep()
