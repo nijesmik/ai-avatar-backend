@@ -84,4 +84,5 @@ class SessionManager:
     async def remove(self, sid):
         async with self.lock:
             session = self.sessions.pop(sid, None)
-        await session.remove_peer_connection()
+        if session:
+            await session.remove_peer_connection()
