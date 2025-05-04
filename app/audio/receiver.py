@@ -18,6 +18,7 @@ logger.setLevel(logging.DEBUG)
 BYTES_PER_MS = 16 * 2
 BYTES_PER_SECOND = BYTES_PER_MS * 1000
 MAX_BUFFER_SIZE = BYTES_PER_SECOND // 5  # 200ms
+VAD_SIZE = BYTES_PER_MS * 20  # 20ms
 
 
 class AudioReceiver:
@@ -54,7 +55,7 @@ class AudioReceiver:
             logger.info(f"❌ MediaStream 종료: {self.sid}")
 
     async def detect_speech(self, pcm: bytes):
-        chunk = self.get_chunk(pcm)
+        chunk = self.get_vad_chunk(pcm)
         is_speech = self.vad.is_speech(chunk, 16000)
 
         if is_speech:
@@ -80,14 +81,13 @@ class AudioReceiver:
             await self.queue.put(item)
             self.speech_count = 0
 
-    def get_chunk(self, pcm: bytes, desired_ms=20):
-        target_size = desired_ms * BYTES_PER_MS
+    def get_vad_chunk(self, pcm: bytes):
+        pcm_size = len(pcm)
+        if pcm_size >= VAD_SIZE:
+            return memoryview(pcm)[:VAD_SIZE]
 
-        if len(pcm) >= target_size:
-            return memoryview(pcm)[:target_size]
-
-        chunk = bytearray(target_size)
-        chunk[: len(pcm)] = pcm
+        chunk = bytearray(VAD_SIZE)
+        chunk[:pcm_size] = pcm
         return chunk
 
     async def generate_pcm_iter(self):
