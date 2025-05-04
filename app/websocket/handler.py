@@ -53,7 +53,11 @@ class SocketEventHandler:
         session = await self.session_manager.get(sid)
         if not session:
             return
-        if not session.peer_connection:
-            return
-        session.peer_connection.tts_track.set_voice(data["gender"])
+
+        voice = data["gender"]
+        session.voice = voice
+
+        if session.peer_connection:
+            session.peer_connection.tts_track.set_voice(voice)
+
         return {"status": "ok"}

@@ -16,6 +16,7 @@ class Session:
         self.sid = sid
         self.sio = sio
         self.chat = ChatService()
+        self.voice = "male"
         self.peer_connection: PeerConnection = None
 
     async def remove_peer_connection(self):
@@ -37,7 +38,7 @@ class Session:
         logger.info(f"❌ PeerConnection 종료: {self.sid}")
 
     def create_peer_connection(self):
-        pc = PeerConnection(self.sid, self.chat)
+        pc = PeerConnection(self.sid, self.chat, self.voice)
         self.peer_connection = pc
 
         @pc.on("track")

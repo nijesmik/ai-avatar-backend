@@ -16,11 +16,11 @@ logger.setLevel(logging.DEBUG)
 
 
 class PeerConnection(RTCPeerConnection):
-    def __init__(self, sid, chat_service: ChatService):
+    def __init__(self, sid, chat_service: ChatService, voice):
         super().__init__()
         self.sid = sid
         self.chat_service = chat_service
-        self.tts_track = TTSAudioTrack(sid)
+        self.tts_track = TTSAudioTrack(sid, voice)
         self.sender = self.addTrack(self.tts_track)
         self.audio_receiver = None
         self.recv_task = None

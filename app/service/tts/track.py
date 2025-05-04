@@ -19,7 +19,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class TTSAudioTrack(AudioTrack):
-    def __init__(self, sid):
+    def __init__(self, sid, voice):
         super().__init__()
         self.sid = sid
         self.loop = asyncio.get_running_loop()
@@ -33,7 +33,7 @@ class TTSAudioTrack(AudioTrack):
             subscription=getenv("AZURE_SPEECH_KEY"),
             region=getenv("AZURE_SPEECH_REGION"),
         )
-        self.set_voice("male")
+        self.set_voice(voice)
         self.speech_config.set_speech_synthesis_output_format(
             speechsdk.SpeechSynthesisOutputFormat.Raw48Khz16BitMonoPcm
         )
