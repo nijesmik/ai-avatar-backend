@@ -1,12 +1,14 @@
 import asyncio
 import logging
 import re
+from time import time
 
 from aiortc import RTCPeerConnection
 
 from app.audio.receiver import AudioReceiver
 from app.service.chat import ChatService
 from app.service.tts import TTSAudioTrack
+from app.util.time import log_time
 from app.websocket.emit import emit_speech_message
 
 logger = logging.getLogger(__name__)
@@ -32,18 +34,23 @@ class PeerConnection(RTCPeerConnection):
 
     async def create_tts_response(self, text: str):
         tasks = []
-        task = asyncio.create_task(emit_speech_message(self.sid, "user", text))
-        tasks.append(task)
+        tasks.append(asyncio.create_task(emit_speech_message(self.sid, "user", text)))
 
         await self.tts_track.run_synthesis(self.generate_llm_response(text, tasks))
 
         await asyncio.gather(*tasks)
 
-    async def generate_llm_response(self, text: str, tasks):
-        response = await self.chat_service.send_utterance(text)
+    async def generate_llm_response(self, text: str, tasks: list):
+        start_time = time()
+        try:
+            response = await self.chat_service.send_utterance(text)
+            log_time(start_time, "LLM")
+            tasks.append(
+                asyncio.create_task(emit_speech_message(self.sid, "model", response))
+            )
+            result = re.sub(r"([.!?])\s+", r"\1", response)
+        except Exception as e:
+            logger.error(f"⚠️ LLM Error: {e}")
+            result = "서버 오류가 발생했습니다.잠시 후 다시 시도해 주세요."
 
-        task = asyncio.create_task(emit_speech_message(self.sid, "model", response))
-        if tasks:
-            tasks.append(task)
-
-        yield re.sub(r"([.!?])\s+", r"\1", response)
+        yield result

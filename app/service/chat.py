@@ -24,8 +24,16 @@ class ChatService:
     client = genai.Client(api_key=getenv("GEMINI_API_KEY"))
     regex = re.compile(r"(.*?[\.!?])(\s+|$)")
 
-    def __init__(self, model: str = "gemini-2.0-flash"):
-        self.chat = self.client.aio.chats.create(model=model)
+    def __init__(self):
+        self.chat = self.create_voice_chat_model()
+
+    def create_voice_chat_model(self):
+        return self.client.aio.chats.create(
+            model="gemini-2.0-flash-lite",
+            config={
+                "system_instruction": system_instruction,
+            },
+        )
 
     async def send_message(self, message: str):
         response = await self.chat.send_message_stream(
@@ -37,12 +45,7 @@ class ChatService:
             yield chunk.text
 
     async def send_utterance_stream(self, utterance: str):
-        response = await self.chat.send_message_stream(
-            utterance,
-            config={
-                "system_instruction": system_instruction,
-            },
-        )
+        response = await self.chat.send_message_stream(utterance)
 
         buffer = ""
 
@@ -66,12 +69,5 @@ class ChatService:
             buffer = buffer[match.end() :]
 
     async def send_utterance(self, utterance: str):
-        response = await self.chat.send_message(
-            utterance,
-            config={
-                "system_instruction": system_instruction,
-            },
-        )
-
-        logger.debug(f"💬 text: {response.text}")
+        response = await self.chat.send_message(utterance)
         return response.text
