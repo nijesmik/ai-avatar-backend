@@ -42,9 +42,12 @@ class STTService:
                             "language": "ko",
                         },
                         "semanticEpd": {
+                            "skipEmptyText": True,
                             "useWordEpd": True,
                             "usePeriodEpd": True,
-                            "gapThreshold": 2000,
+                            "gapThreshold": 500,
+                            "durationThreshold": 300,
+                            "syllableThreshold": 2,
                         },
                     }
                 )

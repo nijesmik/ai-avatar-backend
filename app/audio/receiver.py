@@ -9,6 +9,7 @@ from aiortc.rtcrtpreceiver import RemoteStreamTrack
 from app.audio.resample import resample_to_16k
 from app.audio.utils import save_as_wav
 from app.service.stt import STTService
+from app.util.time import log_time
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -16,6 +17,7 @@ logger.setLevel(logging.DEBUG)
 # 1ms 당 PCM 데이터: 16kHz => 16 samples/ms, each sample 2 bytes -> 16*2 = 32 bytes/ms.
 BYTES_PER_MS = 16 * 2
 BYTES_PER_SECOND = BYTES_PER_MS * 1000
+MAX_BUFFER_SIZE = BYTES_PER_SECOND // 5  # 200ms
 
 
 class AudioReceiver:
@@ -70,10 +72,8 @@ class AudioReceiver:
 
         elif self.in_speech:
             self.speech_count += 1
-            if self.speech_count > 40:  # 40 * 20ms = 800ms
-                self.speech_end_time = time()
-                await self.add_to_queue(None)
-                self.in_speech = False
+            if self.speech_count > 30:  # 30 * 20ms = 600ms
+                await self.on_sppeech_end()
 
     async def add_to_queue(self, item):
         if self.in_speech:
@@ -95,46 +95,40 @@ class AudioReceiver:
         buffer = bytearray()
 
         def flush_buffer(buffer, seq_id, final=False):
+            if final:
+                padding = max(0, int(BYTES_PER_SECOND * 0.8) - len(buffer))
+                buffer.extend(bytes(padding))
+
             joined_pcm = bytes(buffer)
             buffer.clear()
-            # save_as_wav(joined_pcm)
 
             chunk = (joined_pcm, seq_id, False)
-            if not final:
-                return chunk
-
-            padding = bytes(BYTES_PER_SECOND * 2)
-            padded_pcm = joined_pcm + padding
-            # save_as_wav(padded)
-            return [
-                (padded_pcm, seq_id, False),
-                (padding, seq_id + 1, True),
-                (padding, seq_id + 2, True),
-            ]
+            return chunk
 
         while True:
             pcm = await self.queue.get()
             if pcm is None:
-                for chunk in flush_buffer(buffer, seq_id, final=True):
-                    yield chunk
-                break
+                yield flush_buffer(buffer, seq_id, final=True)
+                silence = bytes(BYTES_PER_SECOND * 2)
+                for i in range(1, 3):
+                    yield (silence, seq_id + i, True)
+                return
 
             buffer.extend(pcm)
 
-            if len(buffer) >= BYTES_PER_SECOND / 4:
+            if len(buffer) >= MAX_BUFFER_SIZE:
                 yield flush_buffer(buffer, seq_id)
                 seq_id += 1
 
     async def create_response(self):
-        logger.debug("🟣 응답 생성 시작")
+        logger.debug("🟣 STT 시작")
         text = await self.stt_service.run(self.generate_pcm_iter())
-        logger.debug(f"🗣️  STT time: {(time() - self.speech_end_time) * 1000:.2f}ms")
 
-        try:
-            if text:
-                await self.stt_finished_callback(text)
-        finally:
-            self.response_task = None
+        log_time(self.speech_end_time, "STT")
+        self.speech_end_time = None
+
+        if text:
+            await self.stt_finished_callback(text)
 
     async def cancel(self):
         self.track.stop()
@@ -147,3 +141,11 @@ class AudioReceiver:
                 logger.info(f"❌ 응답 생성 취소: {self.sid}")
 
         await self.stt_service.close()
+
+    async def on_sppeech_end(self):
+        await self.add_to_queue(None)
+        self.speech_end_time = time()
+        self.in_speech = False
+
+        await self.response_task
+        self.response_task = None
