@@ -7,6 +7,7 @@ from google import genai
 from google.genai import types
 
 from . import nest_pb2, nest_pb2_grpc
+from .type import STTResult
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -21,10 +22,6 @@ class STTService:
             "clovaspeech-gw.ncloud.com:50051", grpc.ssl_channel_credentials()
         )
         self.stub = nest_pb2_grpc.NestServiceStub(self.channel)
-
-    def __del__(self):
-        if self.channel:
-            self.channel.close()
 
     async def close(self):
         if self.channel:
@@ -88,11 +85,21 @@ class STTService:
                     logger.info(f"response: {content}")
 
         except grpc.aio.AioRpcError as e:
-            # gRPC 오류 처리
-            logger.error(f"Error: {e.details()}")
+            error_result = await self.handle_error(json.loads(e.details()))
+            return error_result
 
-        result = "".join(buffer)
+        result = STTResult(success=True, text="".join(buffer))
         return result
+
+    async def handle_error(self, error):
+        logger.error(f"⚠️ STT Error: {error}")
+
+        config_error = error.get("config")
+        if not config_error:
+            return STTResult(success=False)
+
+        status = config_error.get("status")
+        return STTResult(success=False, reason=status)
 
     async def correct_text(self, result: str):
         response = await self.client.aio.models.generate_content(

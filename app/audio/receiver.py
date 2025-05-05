@@ -122,13 +122,15 @@ class AudioReceiver:
 
     async def create_response(self):
         logger.debug("🟣 STT 시작")
-        text = await self.stt_service.run(self.generate_pcm_iter())
+        result = await self.stt_service.run(self.generate_pcm_iter())
 
         log_time(self.speech_end_time, "STT")
         self.speech_end_time = None
 
-        if text:
-            await self.stt_finished_callback(text)
+        if result.success and not result.text:
+            return
+
+        await self.stt_finished_callback(result)
 
     async def cancel(self):
         self.track.stop()
