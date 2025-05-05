@@ -6,8 +6,8 @@ import webrtcvad
 from aiortc.mediastreams import MediaStreamError
 from aiortc.rtcrtpreceiver import RemoteStreamTrack
 
-from app.audio.resample import resample_to_16k
-from app.audio.utils import save_as_wav
+from app.audio.resample import resample_to_16k_float
+from app.rnnoise import RNNoise
 from app.service.stt import STTService
 from app.util.time import log_time
 
@@ -18,7 +18,7 @@ logger.setLevel(logging.DEBUG)
 BYTES_PER_MS = 16 * 2
 BYTES_PER_SECOND = BYTES_PER_MS * 1000
 MAX_BUFFER_SIZE = BYTES_PER_SECOND // 5  # 200ms
-VAD_SIZE = BYTES_PER_MS * 20  # 20ms
+VAD_SIZE = BYTES_PER_MS * 30  # 30ms
 
 
 class AudioReceiver:
@@ -32,6 +32,7 @@ class AudioReceiver:
         self.track = track
         self.sid = sid
 
+        self.rnnoise = RNNoise()
         self.vad = webrtcvad.Vad(3)
         self.in_speech = False
         self.speech_count = 0
@@ -48,8 +49,10 @@ class AudioReceiver:
             while True:
                 frame = await self.track.recv()
                 pcm_48k = memoryview(frame.planes[0])
-                pcm_16k = resample_to_16k(pcm_48k)
-                await self.detect_speech(pcm_16k)
+                pcm_16k = resample_to_16k_float(pcm_48k)
+                noise_cancelled = self.rnnoise.process(pcm_16k)
+                if noise_cancelled:
+                    await self.detect_speech(noise_cancelled)
 
         except MediaStreamError:
             logger.info(f"❌ MediaStream 종료: {self.sid}")
@@ -65,7 +68,7 @@ class AudioReceiver:
 
             if (
                 self.response_task is None
-                and self.queue.qsize() > 10  # 20ms * 10 = 200ms
+                and self.queue.qsize() > 7  # 30ms * 7 = 210ms
             ):
                 self.response_task = asyncio.create_task(self.create_response())
 
@@ -73,7 +76,7 @@ class AudioReceiver:
 
         elif self.in_speech:
             self.speech_count += 1
-            if self.speech_count > 30:  # 30 * 20ms = 600ms
+            if self.speech_count > 17:  # 17 * 30ms = 510ms
                 await self.on_sppeech_end()
 
     async def add_to_queue(self, item):
@@ -83,7 +86,9 @@ class AudioReceiver:
 
     def get_vad_chunk(self, pcm: bytes):
         pcm_size = len(pcm)
-        if pcm_size >= VAD_SIZE:
+        if pcm_size == VAD_SIZE:
+            return pcm
+        if pcm_size > VAD_SIZE:
             return memoryview(pcm)[:VAD_SIZE]
 
         chunk = bytearray(VAD_SIZE)
