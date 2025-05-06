@@ -1,4 +1,5 @@
 import ctypes
+import logging
 
 import numpy as np
 
@@ -17,6 +18,9 @@ lib.rnnoise_process_frame.argtypes = [
 ]
 
 FRAME_SIZE = 480  # 30ms @ 16kHz
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 class RNNoiseBuffer:
@@ -53,8 +57,10 @@ class RNNoise:
     _frame_size = FRAME_SIZE
 
     def __init__(self):
+        logger.debug("🩷 RNNoise 초기화")
         self._state = lib.rnnoise_create()
-        self._buffer = RNNoiseBuffer()
+        logger.debug(f"🩷 RNNoise 초기화 완료")
+        # self._buffer = RNNoiseBuffer()
 
     def __del__(self):
         if self._state:

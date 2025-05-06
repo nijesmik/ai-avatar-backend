@@ -53,11 +53,16 @@ class AudioReceiver:
         try:
             while True:
                 frame = await self.track.recv()
+                logger.debug(f"🩷 frame")
                 pcm_48k = memoryview(frame.planes[0])
                 mono = resample_to_mono(pcm_48k, np.float32)
+                logger.debug(f"🩷 mono")
                 rnnoised = self.rnnoise.process(mono)
+                logger.debug(f"🩷 rnnoise")
                 pcm_16k = resample_to_16k(rnnoised)
+                logger.debug(f"🩷 resample")
                 await self.detect_speech(pcm_16k)
+                logger.debug(f"🩷 detect_speech")
 
         except MediaStreamError:
             logger.info(f"❌ MediaStream 종료: {self.sid}")
