@@ -61,7 +61,22 @@ class RNNoise:
             lib.rnnoise_destroy(self._state)
             self._state = None
 
-    def process(self, pcm: np.ndarray):
+    def process(self, input: np.ndarray, time=2):
+        output = np.empty(self._frame_size * 2, dtype=np.float32)
+
+        for i in range(time):
+            offset = i * self._frame_size
+            frame_in = input[offset : offset + self._frame_size]
+            frame_out = output[offset : offset + self._frame_size]
+
+            ptr_in = frame_in.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+            ptr_out = frame_out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+
+            lib.rnnoise_process_frame(self._state, ptr_out, ptr_in)
+
+        return output
+
+    def _deprecated(self, pcm: np.ndarray):
         input = self._buffer.slice(pcm)
         if input is None:
             return None
