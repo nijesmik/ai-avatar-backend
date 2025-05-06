@@ -18,10 +18,3 @@ def resample_to_16k(pcm_48k_mono: np.ndarray) -> bytes:
 
     # 다시 bytes로 변환
     return resampled.astype(np.int16).tobytes()
-
-
-def resample_to_16k_float(pcm_48k: memoryview) -> np.ndarray:
-    audio_np = np.frombuffer(pcm_48k, dtype=np.int16).reshape(-1, 2)
-    mono = audio_np.mean(axis=1).astype(np.int16)
-    resampled = resample_poly(mono, up=1, down=3)
-    return resampled.astype(np.float32)

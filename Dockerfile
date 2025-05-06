@@ -21,7 +21,7 @@ COPY --from=builder /install/deps /usr/local
 COPY app ./app
 COPY --from=builder /install/rnnoise/.libs ./app/rnnoise/libs
 
-ENV RNNOISE_PATH="./app/rnnoise/libs/librnnoise.so"
+ENV RNNOISE_PATH="/backend/app/rnnoise/libs/librnnoise.so"
 
 # Expose the port the app runs on
 EXPOSE 8000

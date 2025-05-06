@@ -55,8 +55,8 @@ class AudioReceiver:
                 frame = await self.track.recv()
                 pcm_48k = memoryview(frame.planes[0])
                 mono = resample_to_mono(pcm_48k, np.float32)
-                rnnoised = self.rnnoise.process(mono)
-                pcm_16k = resample_to_16k(rnnoised)
+                denoised = self.rnnoise.process(mono)
+                pcm_16k = resample_to_16k(denoised)
                 await self.detect_speech(pcm_16k)
 
         except MediaStreamError:
