@@ -62,7 +62,16 @@ class RNNoise:
             self._state = None
 
     def process(self, input: np.ndarray, time=2):
-        output = np.empty(self._frame_size * 2, dtype=np.float32)
+        assert (
+            input.dtype == np.float32
+        ), f"RNNoise only supports float32, but got {input.dtype}"
+
+        size = self._frame_size * time
+        assert input.shape == (
+            size,
+        ), f"RNNoise expects input shape of ({size},), but got {input.shape}"
+
+        output = np.empty(size, dtype=np.float32)
 
         for i in range(time):
             offset = i * self._frame_size
