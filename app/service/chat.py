@@ -42,13 +42,12 @@ class ChatService:
             },
         )
 
-    async def send_message(self, message: str):
+    async def send_message_stream(self, message: str):
         response = await self.chat.send_message_stream(
             message,
         )
 
         async for chunk in response:
-            logger.debug(f"💬 text: {chunk.text}")
             yield chunk.text
 
     async def send_utterance_stream(self, utterance: str):

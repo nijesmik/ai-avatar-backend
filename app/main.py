@@ -30,5 +30,6 @@ sio.event(handler.disconnect)
 sio.event(handler.offer)
 sio.event(handler.ice_candidate)
 sio.event(handler.voice)
+sio.event(handler.message)
 
 sio_app = socketio.ASGIApp(sio, other_asgi_app=app)

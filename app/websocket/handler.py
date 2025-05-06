@@ -1,4 +1,5 @@
 import logging
+from time import time
 
 from aiortc import RTCIceCandidate, RTCSessionDescription
 from socketio import AsyncServer
@@ -6,7 +7,6 @@ from socketio import AsyncServer
 from app.connection.session import SessionManager
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 class SocketEventHandler:
@@ -61,3 +61,21 @@ class SocketEventHandler:
             session.peer_connection.tts_track.set_voice(voice)
 
         return {"status": "ok"}
+
+    async def message(self, sid, data):
+        session = await self.session_manager.get(sid)
+        if not session:
+            return
+
+        text = data["text"]
+        response = session.chat.send_message_stream(text)
+
+        async for chunk in response:
+            await self.sio.emit(
+                "message-chunk",
+                {
+                    "text": chunk,
+                    "time": int(time() * 1000),
+                },
+                to=sid,
+            )
