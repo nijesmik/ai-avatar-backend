@@ -2,11 +2,12 @@ import asyncio
 import logging
 from time import time
 
+import numpy as np
 import webrtcvad
 from aiortc.mediastreams import MediaStreamError
 from aiortc.rtcrtpreceiver import RemoteStreamTrack
 
-from app.audio.resample import resample_to_16k_float
+from app.audio.resample import resample_to_16k, resample_to_mono
 from app.rnnoise import RNNoise
 from app.service.stt import STTService
 from app.util.time import log_time
@@ -18,7 +19,11 @@ logger.setLevel(logging.DEBUG)
 BYTES_PER_MS = 16 * 2
 BYTES_PER_SECOND = BYTES_PER_MS * 1000
 MAX_BUFFER_SIZE = BYTES_PER_SECOND // 5  # 200ms
-VAD_SIZE = BYTES_PER_MS * 30  # 30ms
+
+UNIT_PCM_CHUNK_TIME = 20  # 20ms
+VAD_SIZE = BYTES_PER_MS * UNIT_PCM_CHUNK_TIME
+TASK_RUN_THRESHOLD = 200 // UNIT_PCM_CHUNK_TIME
+SPEECH_END_THRESHOLD = 500 // UNIT_PCM_CHUNK_TIME
 
 
 class AudioReceiver:
@@ -49,10 +54,10 @@ class AudioReceiver:
             while True:
                 frame = await self.track.recv()
                 pcm_48k = memoryview(frame.planes[0])
-                pcm_16k = resample_to_16k_float(pcm_48k)
-                noise_cancelled = self.rnnoise.process(pcm_16k)
-                if noise_cancelled:
-                    await self.detect_speech(noise_cancelled)
+                mono = resample_to_mono(pcm_48k, np.float32)
+                rnnoised = self.rnnoise.process(mono)
+                pcm_16k = resample_to_16k(rnnoised)
+                await self.detect_speech(pcm_16k)
 
         except MediaStreamError:
             logger.info(f"❌ MediaStream 종료: {self.sid}")
@@ -66,17 +71,14 @@ class AudioReceiver:
                 self.in_speech = True
                 self.queue = asyncio.Queue()
 
-            if (
-                self.response_task is None
-                and self.queue.qsize() > 7  # 30ms * 7 = 210ms
-            ):
+            if self.response_task is None and self.queue.qsize() > TASK_RUN_THRESHOLD:
                 self.response_task = asyncio.create_task(self.create_response())
 
             await self.add_to_queue(pcm)
 
         elif self.in_speech:
             self.speech_count += 1
-            if self.speech_count > 17:  # 17 * 30ms = 510ms
+            if self.speech_count > SPEECH_END_THRESHOLD:
                 await self.on_sppeech_end()
 
     async def add_to_queue(self, item):
