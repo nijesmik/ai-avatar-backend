@@ -5,6 +5,7 @@ from socketio import AsyncServer
 
 from app.connection.webrtc import PeerConnection
 from app.service.chat import ChatService
+from app.service.tts import SynthesisVoiceKorean
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -16,7 +17,7 @@ class Session:
         self.sid = sid
         self.sio = sio
         self.chat = ChatService(sid)
-        self.voice = "male"
+        self.voice = SynthesisVoiceKorean.InJoon
         self.peer_connection: PeerConnection = None
 
     async def remove_peer_connection(self):

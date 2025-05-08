@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class TTSAudioTrack(AudioTrack):
-    def __init__(self, sid, voice):
+    def __init__(self, sid, voice: SynthesisVoiceKorean):
         super().__init__()
         self.sid = sid
         self.loop = asyncio.get_running_loop()
@@ -32,7 +32,7 @@ class TTSAudioTrack(AudioTrack):
             subscription=getenv("AZURE_SPEECH_KEY"),
             region=getenv("AZURE_SPEECH_REGION"),
         )
-        self.set_voice(voice)
+        self.voice = voice
         self.speech_config.set_speech_synthesis_output_format(
             speechsdk.SpeechSynthesisOutputFormat.Raw48Khz16BitMonoPcm
         )
@@ -111,12 +111,10 @@ class TTSAudioTrack(AudioTrack):
             self.loop,
         )
 
-    def set_voice(self, gender: str):
-        if gender == "male":
-            self.speech_config.speech_synthesis_voice_name = SynthesisVoiceKorean.InJoon
-            return
-        if gender == "female":
-            self.speech_config.speech_synthesis_voice_name = (
-                SynthesisVoiceKorean.SunHi
-            )
-            return
+    @property
+    def voice(self):
+        return self.speech_config.speech_synthesis_voice_name
+
+    @voice.setter
+    def voice(self, voice: SynthesisVoiceKorean):
+        self.speech_config.speech_synthesis_voice_name = voice

@@ -5,6 +5,7 @@ from aiortc import RTCIceCandidate, RTCSessionDescription
 from socketio import AsyncServer
 
 from app.connection.session import SessionManager
+from app.service.tts import SynthesisVoiceKorean
 
 logger = logging.getLogger(__name__)
 
@@ -50,15 +51,18 @@ class SocketEventHandler:
             await session.peer_connection.addIceCandidate(candidate)
 
     async def voice(self, sid, data):
+        voice = SynthesisVoiceKorean.get(gender=data["gender"], voice=data["voice"])
+        if voice is None:
+            return
+
         session = await self.session_manager.get(sid)
         if not session:
             return
 
-        voice = data["gender"]
         session.voice = voice
 
         if session.peer_connection:
-            session.peer_connection.tts_track.set_voice(voice)
+            session.peer_connection.tts_track.voice = voice
 
         return {"status": "ok"}
 
