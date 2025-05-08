@@ -18,12 +18,13 @@ logger.setLevel(logging.DEBUG)
 # 1ms 당 PCM 데이터: 16kHz => 16 samples/ms, each sample 2 bytes -> 16*2 = 32 bytes/ms.
 BYTES_PER_MS = 16 * 2
 BYTES_PER_SECOND = BYTES_PER_MS * 1000
-MAX_BUFFER_SIZE = BYTES_PER_SECOND // 5  # 200ms
+MAX_BUFFER_SIZE = BYTES_PER_MS * 200  # 200ms
+LAST_CHUNK_SIZE = BYTES_PER_MS * 500
 
 UNIT_PCM_CHUNK_TIME = 20  # 20ms
 VAD_SIZE = BYTES_PER_MS * UNIT_PCM_CHUNK_TIME
 TASK_RUN_THRESHOLD = 200 // UNIT_PCM_CHUNK_TIME
-SPEECH_END_THRESHOLD = 500 // UNIT_PCM_CHUNK_TIME
+SPEECH_END_THRESHOLD = 400 // UNIT_PCM_CHUNK_TIME
 
 
 class AudioReceiver:
@@ -67,6 +68,7 @@ class AudioReceiver:
         is_speech = self.vad.is_speech(chunk, 16000)
 
         if is_speech:
+            self.speech_count = 0
             if not self.in_speech:
                 self.in_speech = True
                 self.queue = asyncio.Queue()
@@ -74,17 +76,16 @@ class AudioReceiver:
             if self.response_task is None and self.queue.qsize() > TASK_RUN_THRESHOLD:
                 self.response_task = asyncio.create_task(self.create_response())
 
-            await self.add_to_queue(pcm)
-
         elif self.in_speech:
             self.speech_count += 1
             if self.speech_count > SPEECH_END_THRESHOLD:
                 await self.on_sppeech_end()
 
+        await self.add_to_queue(pcm)
+
     async def add_to_queue(self, item):
         if self.in_speech:
             await self.queue.put(item)
-            self.speech_count = 0
 
     def get_vad_chunk(self, pcm: bytes):
         pcm_size = len(pcm)
@@ -103,7 +104,7 @@ class AudioReceiver:
 
         def flush_buffer(buffer, seq_id, final=False):
             if final:
-                padding = max(0, int(BYTES_PER_SECOND * 0.8) - len(buffer))
+                padding = max(0, LAST_CHUNK_SIZE - len(buffer))
                 buffer.extend(bytes(padding))
 
             joined_pcm = bytes(buffer)
