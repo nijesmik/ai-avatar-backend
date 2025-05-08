@@ -23,8 +23,8 @@ LAST_CHUNK_SIZE = BYTES_PER_MS * 500
 
 UNIT_PCM_CHUNK_TIME = 20  # 20ms
 VAD_SIZE = BYTES_PER_MS * UNIT_PCM_CHUNK_TIME
-TASK_RUN_THRESHOLD = 200 // UNIT_PCM_CHUNK_TIME
-SPEECH_END_THRESHOLD = 400 // UNIT_PCM_CHUNK_TIME
+TASK_RUN_THRESHOLD = 300 // UNIT_PCM_CHUNK_TIME
+SPEECH_END_THRESHOLD = 300 // UNIT_PCM_CHUNK_TIME
 
 
 class AudioReceiver:
@@ -67,25 +67,30 @@ class AudioReceiver:
         chunk = self.get_vad_chunk(pcm)
         is_speech = self.vad.is_speech(chunk, 16000)
 
+        await self.queue.put(pcm)
+
         if is_speech:
             self.speech_count = 0
             if not self.in_speech:
                 self.in_speech = True
-                self.queue = asyncio.Queue()
 
-            if self.response_task is None and self.queue.qsize() > TASK_RUN_THRESHOLD:
+            if (
+                self.response_task is None
+                and self.queue.qsize() > TASK_RUN_THRESHOLD + 5
+            ):
                 self.response_task = asyncio.create_task(self.create_response())
 
-        elif self.in_speech:
+            return
+
+        if self.in_speech:
             self.speech_count += 1
             if self.speech_count > SPEECH_END_THRESHOLD:
                 await self.on_sppeech_end()
+                self.queue = asyncio.Queue()
+            return
 
-        await self.add_to_queue(pcm)
-
-    async def add_to_queue(self, item):
-        if self.in_speech:
-            await self.queue.put(item)
+        if self.queue.qsize() > 5:
+            await self.queue.get()
 
     def get_vad_chunk(self, pcm: bytes):
         pcm_size = len(pcm)
@@ -129,7 +134,6 @@ class AudioReceiver:
                 seq_id += 1
 
     async def create_response(self):
-        logger.debug("🟣 STT 시작")
         result = await self.stt_service.run(self.generate_pcm_iter())
 
         log_time(self.speech_end_time, "STT")
@@ -153,7 +157,7 @@ class AudioReceiver:
         await self.stt_service.close()
 
     async def on_sppeech_end(self):
-        await self.add_to_queue(None)
+        await self.queue.put(None)
         self.speech_end_time = time()
         self.in_speech = False
 
