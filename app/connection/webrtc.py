@@ -42,7 +42,7 @@ class PeerConnection(RTCPeerConnection):
         await self.tts_track.run_synthesis(self.generate_llm_response(text))
 
         await emit_task
-        await self.chat_service.wait_emit_task()
+        await self.chat_service.wait_emit_message()
 
     async def generate_llm_response(self, text: str):
         try:

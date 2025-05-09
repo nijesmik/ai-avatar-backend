@@ -1,13 +1,14 @@
-import asyncio
 import logging
 import re
+from enum import Enum
 from os import getenv
 from time import time
 
 from google import genai
 
 from app.util.time import log_time
-from app.websocket.emit import emit_speech_message
+
+from .service import ChatService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -25,29 +26,37 @@ Please follow these rules when generating your response:
 """
 
 
-class ChatService:
+class GoogleAIModel(str, Enum):
+    Gemini_2_Flash = "gemini-2.0-flash"
+    Gemini_2_Flash_Lite = "gemini-2.0-flash-lite"
+    Gemini_1Dot5_Flash_8b = "gemini-1.5-flash-8b"
+
+
+class Google(ChatService):
     client = genai.Client(api_key=getenv("GEMINI_API_KEY"))
     regex = re.compile(r"(.*?[\.!?])(\s+|$)")
 
     def __init__(self, sid):
+        super().__init__(sid)
         self.chat = self.create_voice_chat_model()
-        self.sid = sid
-        self._emit_task = None
 
     def create_voice_chat_model(self):
         return self.client.aio.chats.create(
-            model="gemini-2.0-flash-lite",
+            model=GoogleAIModel.Gemini_2_Flash_Lite,
             config={
                 "system_instruction": system_instruction,
             },
         )
 
     async def send_message_stream(self, message: str):
+        start_time = time()
         response = await self.chat.send_message_stream(
             message,
         )
 
         async for chunk in response:
+            log_time(start_time, "Google")
+            start_time = None
             yield chunk.text
 
     async def send_utterance_stream(self, utterance: str):
@@ -62,7 +71,7 @@ class ChatService:
 
             match = self.regex.match(buffer)
             if match:
-                log_time(start_time, "LLM")
+                log_time(start_time, "Google")
                 start_time = None
                 yield match.group(1).strip()
                 buffer = buffer[match.end() :]
@@ -75,21 +84,12 @@ class ChatService:
             yield match.group(1)
             buffer = buffer[match.end() :]
 
-        self._emit_task = asyncio.create_task(
-            emit_speech_message(self.sid, "model", "".join(result))
-        )
+        self.emit_message("".join(result))
 
     async def send_utterance(self, utterance: str):
         start_time = time()
         response = await self.chat.send_message(utterance)
-        log_time(start_time, "LLM")
+        log_time(start_time, "Google")
 
-        self._emit_task = asyncio.create_task(
-            emit_speech_message(self.sid, "model", response.text)
-        )
+        self.emit_message(response.text)
         return response.text
-
-    async def wait_emit_task(self):
-        if self._emit_task:
-            await self._emit_task
-            self._emit_task = None

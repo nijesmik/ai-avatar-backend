@@ -2,6 +2,7 @@ import logging
 from time import time
 
 from aiortc import RTCIceCandidate, RTCSessionDescription
+from google.genai.errors import ServerError
 from socketio import AsyncServer
 
 from app.connection.session import SessionManager
@@ -71,15 +72,28 @@ class SocketEventHandler:
         if not session:
             return
 
-        text = data["text"]
-        response = session.chat.send_message_stream(text)
+        try:
+            text = data["text"]
+            response = session.chat.send_message_stream(text)
 
-        async for chunk in response:
-            await self.sio.emit(
-                "message-chunk",
-                {
-                    "text": chunk,
-                    "time": int(time() * 1000),
-                },
-                to=sid,
-            )
+            async for chunk in response:
+                await self.sio.emit(
+                    "message-chunk",
+                    {
+                        "text": chunk,
+                        "time": int(time() * 1000),
+                    },
+                    to=sid,
+                )
+
+        except ServerError as e:
+            return {
+                "code": e.code,
+                "message": e.message,
+                "status": e.status,
+                "time": int(time() * 1000),
+            }
+
+        return {
+            "status": "ok",
+        }
