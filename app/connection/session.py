@@ -4,7 +4,7 @@ import logging
 from socketio import AsyncServer
 
 from app.connection.webrtc import PeerConnection
-from app.service.chat import Google, Groq
+from app.service.chat import Google, Groq, Messages, Provider
 from app.service.tts import SynthesisVoiceKorean
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,8 @@ class Session:
         super().__init__()
         self.sid = sid
         self.sio = sio
-        self.chat = Google(sid)
+        self.messages = Messages(Provider.Google)
+        self.chat = Google(sid, self.messages)
         self.voice = SynthesisVoiceKorean.InJoon
         self.peer_connection: PeerConnection = None
 
