@@ -8,8 +8,6 @@ from google import genai
 
 from app.util.time import log_time
 
-from .service import ChatService
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -32,12 +30,11 @@ class GoogleAIModel(str, Enum):
     Gemini_1Dot5_Flash_8b = "gemini-1.5-flash-8b"
 
 
-class Google(ChatService):
+class Google:
     client = genai.Client(api_key=getenv("GEMINI_API_KEY"))
     regex = re.compile(r"(.*?[\.!?])(\s+|$)")
 
-    def __init__(self, sid):
-        super().__init__(sid)
+    def __init__(self):
         self.chat = self.create_voice_chat_model()
 
     def create_voice_chat_model(self):
@@ -84,12 +81,9 @@ class Google(ChatService):
             yield match.group(1)
             buffer = buffer[match.end() :]
 
-        self.emit_message("".join(result))
-
     async def send_utterance(self, utterance: str):
         start_time = time()
         response = await self.chat.send_message(utterance)
         log_time(start_time, "Google")
 
-        self.emit_message(response.text)
         return response.text

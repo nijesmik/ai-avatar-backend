@@ -81,7 +81,7 @@ class SocketEventHandler:
 
         try:
             text = data["text"]
-            response = session.chat.send_message_stream(text)
+            response = session.chat.llm.send_message_stream(text)
 
             async for chunk in response:
                 await self.sio.emit(
@@ -114,7 +114,7 @@ class SocketEventHandler:
 
         for supported in supported_models:
             if supported.equal(model):
-                session.replace_model(supported)
+                session.chat.change_model(supported)
                 return {"status": "ok"}
 
         return {

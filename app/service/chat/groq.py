@@ -5,8 +5,8 @@ import openai
 from app.config import GROQ_API_KEY
 from app.util.time import log_time
 
+from .llm import LLMService
 from .message import Messages
-from .service import ChatService
 from .type import ModelList, Provider
 
 system_instruction_ko = f"""
@@ -34,9 +34,9 @@ Please follow these rules when generating your response:
 """
 
 
-class Groq(ChatService):
-    def __init__(self, sid, messages: Messages = None):
-        super().__init__(sid)
+class Groq(LLMService):
+    def __init__(self, messages: Messages = None):
+
         self.client = openai.AsyncOpenAI(
             base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY
         )
@@ -57,7 +57,6 @@ class Groq(ChatService):
         answer = response.choices[0].message.content
         self.messages.add_model_output(answer)
 
-        self.emit_message(answer)
         return answer
 
     async def send_message_stream(self, message: str):

@@ -7,11 +7,11 @@ from app.util.time import log_time
 
 from .google import system_instruction
 from .message import Messages
-from .service import ChatService
+from .llm import LLMService
 from .type import ModelList, Provider
 
 
-class Google(ChatService):
+class Google(LLMService):
     api_key = GEMINI_API_KEY
     config = {
         "system_instruction": system_instruction,
@@ -20,11 +20,9 @@ class Google(ChatService):
 
     def __init__(
         self,
-        sid,
         messages: Messages = None,
         model: ModelList.Google = ModelList.Google.Gemini_2_Flash_Lite,
     ):
-        super().__init__(sid)
         self.client = genai.Client(api_key=self.api_key)
         self.messages = self._init_messages(messages, Provider.Google)
         self.model = model
@@ -60,5 +58,4 @@ class Google(ChatService):
         log_time(start_time, self.model.value)
 
         self.messages.add("assistant", response.text)
-        self.emit_message(response.text)
         return response.text
