@@ -57,5 +57,7 @@ class PeerConnection(RTCPeerConnection):
     async def generate_error_response(self, reason: str | None):
         if reason == "No more slot":
             yield "서버 연결이 원활하지 않습니다.다시 말씀해 주세요."
+        if reason == "Unavilable":
+            yield "음성 인식 서버에 문제가 발생했습니다.나중에 다시 시도해 주세요."
         else:
             yield "음성 인식에 실패했습니다.잠시 후 다시 시도해 주세요."

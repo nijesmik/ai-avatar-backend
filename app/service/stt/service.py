@@ -85,14 +85,19 @@ class STTService:
                     logger.info(f"response: {content}")
 
         except grpc.aio.AioRpcError as e:
-            error_result = await self.handle_error(json.loads(e.details()))
+            error_result = await self.handle_error(e.details())
             return error_result
 
         result = STTResult(success=True, text="".join(buffer))
         return result
 
-    async def handle_error(self, error):
-        logger.error(f"⚠️ STT Error: {error}")
+    async def handle_error(self, error_details):
+        logger.error(f"⚠️ STT Error: {error_details}")
+
+        try:
+            error = json.loads(error_details)
+        except json.JSONDecodeError:
+            return STTResult(success=False, reason="Unavailable")
 
         config_error = error.get("config")
         if not config_error:
