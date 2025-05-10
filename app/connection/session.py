@@ -70,8 +70,13 @@ class Session:
 
     def replace_model(self, model: Model):
         provider = model.provider()
+
+        if self.chat.model.provider() == provider:
+            self.chat.model = model
+            return
+
         if provider == Provider.Google:
-            self.chat = Google(self.sid, self.chat.messages)
+            self.chat = Google(self.sid, self.chat.messages, model)
         elif provider == Provider.Groq:
             self.chat = Groq(self.sid, self.chat.messages)
         else:

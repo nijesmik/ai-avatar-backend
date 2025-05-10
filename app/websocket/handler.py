@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 supported_models: list[Model] = [
     ModelList.Groq.Gemma2_9b_It,
     ModelList.Google.Gemini_2_Flash_Lite,
+    ModelList.Google.Gemini_2_Flash
 ]
 
 

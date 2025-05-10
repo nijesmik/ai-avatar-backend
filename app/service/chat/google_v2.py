@@ -15,13 +15,19 @@ class Google(ChatService):
     api_key = GEMINI_API_KEY
     config = {
         "system_instruction": system_instruction,
+        "max_output_tokens": 256,
     }
 
-    def __init__(self, sid, messages: Messages = None):
+    def __init__(
+        self,
+        sid,
+        messages: Messages = None,
+        model: ModelList.Google = ModelList.Google.Gemini_2_Flash_Lite,
+    ):
         super().__init__(sid)
         self.client = genai.Client(api_key=self.api_key)
         self.messages = self._init_messages(messages, Provider.Google)
-        self.model = ModelList.Google.Gemini_2_Flash_Lite
+        self.model = model
 
     async def send_message_stream(self, message: str):
         self.messages.add("user", message)
@@ -51,7 +57,7 @@ class Google(ChatService):
             contents=self.messages.get(),
             config=self.config,
         )
-        log_time(start_time, "Google")
+        log_time(start_time, self.model.value)
 
         self.messages.add("assistant", response.text)
         self.emit_message(response.text)
