@@ -24,7 +24,7 @@ LAST_CHUNK_SIZE = BYTES_PER_MS * 500
 UNIT_PCM_CHUNK_TIME = 20  # 20ms
 VAD_SIZE = BYTES_PER_MS * UNIT_PCM_CHUNK_TIME
 TASK_RUN_THRESHOLD = 300 // UNIT_PCM_CHUNK_TIME
-SPEECH_END_THRESHOLD = 300 // UNIT_PCM_CHUNK_TIME
+SPEECH_END_THRESHOLD = 500 // UNIT_PCM_CHUNK_TIME
 
 
 class AudioReceiver:
@@ -64,6 +64,9 @@ class AudioReceiver:
             logger.info(f"❌ MediaStream 종료: {self.sid}")
 
     async def detect_speech(self, pcm: bytes):
+        if self.response_task and not self.in_speech:
+            return
+
         chunk = self.get_vad_chunk(pcm)
         is_speech = self.vad.is_speech(chunk, 16000)
 
@@ -86,7 +89,6 @@ class AudioReceiver:
             self.speech_count += 1
             if self.speech_count > SPEECH_END_THRESHOLD:
                 await self.on_sppeech_end()
-                self.queue = asyncio.Queue()
             return
 
         if self.queue.qsize() > 5:
@@ -125,6 +127,7 @@ class AudioReceiver:
                 silence = bytes(BYTES_PER_SECOND * 2)
                 for i in range(1, 3):
                     yield (silence, seq_id + i, True)
+                self.queue = asyncio.Queue()
                 return
 
             buffer.extend(pcm)
@@ -134,15 +137,18 @@ class AudioReceiver:
                 seq_id += 1
 
     async def create_response(self):
-        result = await self.stt_service.run(self.generate_pcm_iter())
+        try:
+            result = await self.stt_service.run(self.generate_pcm_iter())
 
-        log_time(self.speech_end_time, "STT")
-        self.speech_end_time = None
+            log_time(self.speech_end_time, "STT")
+            self.speech_end_time = None
 
-        if result.success and not result.text:
-            return
+            if result.success and not result.text:
+                return
 
-        await self.stt_finished_callback(result)
+            await self.stt_finished_callback(result)
+        finally:
+            self.response_task = None
 
     async def cancel(self):
         self.track.stop()
@@ -160,7 +166,3 @@ class AudioReceiver:
         await self.queue.put(None)
         self.speech_end_time = time()
         self.in_speech = False
-
-        if self.response_task:
-            await self.response_task
-            self.response_task = None
