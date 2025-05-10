@@ -45,7 +45,7 @@ class Groq(LLMService):
             messages, Provider.Groq, system_instruction_en
         )
 
-    async def send_utterance(self, utterance: str):
+    async def send_message(self, utterance: str):
         self.messages.add_user_input(utterance)
 
         start_time = time()

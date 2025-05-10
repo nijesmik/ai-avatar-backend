@@ -1,10 +1,14 @@
 import asyncio
+import logging
+import re
 
 from app.websocket.emit import emit_speech_message
 
 from .google_v2 import Google
 from .groq import Groq
 from .type import Model, Provider
+
+logger = logging.getLogger(__name__)
 
 
 class ChatService:
@@ -37,6 +41,13 @@ class ChatService:
             self._emit_task = None
 
     async def send_utterance(self, utterance: str):
-        answer = await self.llm.send_utterance(utterance)
-        self._emit_response(answer)
-        return answer
+        try:
+            response = await self.llm.send_message(utterance)
+            self._emit_response(response)
+            result = re.sub(r"([.!?])\s+", r"\1", response)
+
+        except Exception as e:
+            logger.error(f"⚠️ LLM Error: {e}")
+            result = "서버 오류가 발생했습니다.잠시 후 다시 시도해 주세요."
+
+        yield result

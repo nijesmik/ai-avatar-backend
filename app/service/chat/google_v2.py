@@ -6,8 +6,8 @@ from app.config import GEMINI_API_KEY
 from app.util.time import log_time
 
 from .google import system_instruction
-from .message import Messages
 from .llm import LLMService
+from .message import Messages
 from .type import ModelList, Provider
 
 
@@ -46,7 +46,7 @@ class Google(LLMService):
 
         self.messages.add("assistant", "".join(buffer))
 
-    async def send_utterance(self, utterance: str):
+    async def send_message(self, utterance: str):
         self.messages.add("user", utterance)
 
         start_time = time()

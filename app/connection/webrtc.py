@@ -1,6 +1,4 @@
 import asyncio
-import logging
-import re
 
 from aiortc import RTCPeerConnection
 
@@ -9,9 +7,6 @@ from app.service.chat import ChatService
 from app.service.stt import STTResult
 from app.service.tts import TTSAudioTrack
 from app.websocket.emit import emit_speech_message
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 class PeerConnection(RTCPeerConnection):
@@ -39,20 +34,10 @@ class PeerConnection(RTCPeerConnection):
         text = stt.text
         emit_task = asyncio.create_task(emit_speech_message(self.sid, "user", text))
 
-        await self.tts_track.run_synthesis(self.generate_llm_response(text))
+        await self.tts_track.run_synthesis(self.chat_service.send_utterance(text))
 
         await emit_task
         await self.chat_service.wait_emit_message()
-
-    async def generate_llm_response(self, text: str):
-        try:
-            response = await self.chat_service.send_utterance(text)
-            result = re.sub(r"([.!?])\s+", r"\1", response)
-        except Exception as e:
-            logger.error(f"⚠️ LLM Error: {e}")
-            result = "서버 오류가 발생했습니다.잠시 후 다시 시도해 주세요."
-
-        yield result
 
     async def generate_error_response(self, reason: str | None):
         if reason == "No more slot":

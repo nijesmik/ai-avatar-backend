@@ -15,7 +15,7 @@ class LLMService(ABC):
         return messages
 
     @abstractmethod
-    async def send_utterance(self, utterance: str):
+    async def send_message(self, utterance: str):
         pass
 
     @abstractmethod
