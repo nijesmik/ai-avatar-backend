@@ -6,9 +6,15 @@ from google.genai.errors import ServerError
 from socketio import AsyncServer
 
 from app.connection.session import SessionManager
+from app.service.chat import ModelList, Model
 from app.service.tts import SynthesisVoiceKorean
 
 logger = logging.getLogger(__name__)
+
+supported_models: list[Model] = [
+    ModelList.Groq.Gemma2_9b_It,
+    ModelList.Google.Gemini_2_Flash_Lite,
+]
 
 
 class SocketEventHandler:
@@ -96,4 +102,20 @@ class SocketEventHandler:
 
         return {
             "status": "ok",
+        }
+
+    async def model(self, sid, data):
+        session = await self.session_manager.get(sid)
+        if not session:
+            return
+
+        model = data["model"]
+
+        for supported in supported_models:
+            if supported.equal(model):
+                session.replace_model(supported)
+                return {"status": "ok"}
+
+        return {
+            "status": "Unsupported",
         }

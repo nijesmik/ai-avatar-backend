@@ -5,9 +5,10 @@ from google import genai
 from app.config import GEMINI_API_KEY
 from app.util.time import log_time
 
-from .google import GoogleAIModel, system_instruction
-from .message import Messages, Provider
+from .google import system_instruction
+from .message import Messages
 from .service import ChatService
+from .type import ModelList, Provider
 
 
 class Google(ChatService):
@@ -16,12 +17,11 @@ class Google(ChatService):
         "system_instruction": system_instruction,
     }
 
-    def __init__(self, sid, messages: Messages):
+    def __init__(self, sid, messages: Messages = None):
         super().__init__(sid)
         self.client = genai.Client(api_key=self.api_key)
-        self.messages = messages
-        self.messages.provider = Provider.Google
-        self.model = GoogleAIModel.Gemini_2_Flash_Lite
+        self.messages = self._init_messages(messages, Provider.Google)
+        self.model = ModelList.Google.Gemini_2_Flash_Lite
 
     async def send_message_stream(self, message: str):
         self.messages.add("user", message)

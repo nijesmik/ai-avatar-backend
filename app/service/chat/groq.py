@@ -1,4 +1,3 @@
-from enum import Enum
 from time import time
 
 import openai
@@ -6,7 +5,9 @@ import openai
 from app.config import GROQ_API_KEY
 from app.util.time import log_time
 
+from .message import Messages
 from .service import ChatService
+from .type import ModelList, Provider
 
 system_instruction_ko = f"""
 Assistant는 사용자의 질문에 항상 한국어로 대답합니다. 문장은 짧고 자연스럽게 말하듯이 말합니다. 외래어, 줄임말, 이모지를 사용하지 않습니다. 음성 합성에 적합하도록 모든 단어는 발음하기 쉽게 표현하고, 정확한 문장부호를 사용해 말의 리듬을 자연스럽게 만듭니다.
@@ -33,42 +34,38 @@ Please follow these rules when generating your response:
 """
 
 
-class GroqAIModel(str, Enum):
-    Llama_3Dot1_8b_Instant = "llama-3.1-8b-instant"
-    Llama3_8b_8192 = "llama3-8b-8192"
-    Gemma2_9b_It = "gemma2-9b-it"
-
-
 class Groq(ChatService):
-    def __init__(self, sid):
+    def __init__(self, sid, messages: Messages = None):
         super().__init__(sid)
         self.client = openai.AsyncOpenAI(
             base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY
         )
-        self.model = GroqAIModel.Gemma2_9b_It
-        self.messages = [{"role": "system", "content": system_instruction_en}]
+        self.model = ModelList.Groq.Gemma2_9b_It
+        self.messages = self._init_messages(
+            messages, Provider.Groq, system_instruction_en
+        )
 
     async def send_utterance(self, utterance: str):
-        self.messages.append({"role": "user", "content": utterance})
+        self.messages.add_user_input(utterance)
 
         start_time = time()
         response = await self.client.chat.completions.create(
-            model=self.model, messages=self.messages
+            model=self.model, messages=self.messages.get()
         )
         log_time(start_time, "Groq")
 
         answer = response.choices[0].message.content
-        self.messages.append({"role": "assistant", "content": answer})
+        self.messages.add_model_output(answer)
 
         self.emit_message(answer)
         return answer
 
     async def send_message_stream(self, message: str):
-        self.messages.append({"role": "user", "content": message})
+        self.messages.add_user_input(message)
 
         start_time = time()
         stream = await self.client.chat.completions.create(
-            model=self.model, messages=self.messages, stream=True
+            model=self.model, messages=self.messages.get(), stream=True
         )
 
         buffer = []
@@ -78,4 +75,4 @@ class Groq(ChatService):
             answer = chunk.choices[0].delta.content
             yield answer
 
-        self.messages.append({"role": "assistant", "content": "".join(buffer)})
+        self.messages.add_model_output("".join(buffer))

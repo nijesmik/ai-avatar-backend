@@ -4,7 +4,7 @@ import logging
 from socketio import AsyncServer
 
 from app.connection.webrtc import PeerConnection
-from app.service.chat import Google, Groq, Messages, Provider
+from app.service.chat import Google, Groq, Model, Provider
 from app.service.tts import SynthesisVoiceKorean
 
 logger = logging.getLogger(__name__)
@@ -16,8 +16,7 @@ class Session:
         super().__init__()
         self.sid = sid
         self.sio = sio
-        self.messages = Messages(Provider.Google)
-        self.chat = Google(sid, self.messages)
+        self.chat = Groq(sid)
         self.voice = SynthesisVoiceKorean.InJoon
         self.peer_connection: PeerConnection = None
 
@@ -68,6 +67,18 @@ class Session:
                     },
                     to=self.sid,
                 )
+
+    def replace_model(self, model: Model):
+        provider = model.provider()
+        if provider == Provider.Google:
+            self.chat = Google(self.sid, self.chat.messages)
+        elif provider == Provider.Groq:
+            self.chat = Groq(self.sid, self.chat.messages)
+        else:
+            return
+
+        if self.peer_connection:
+            self.peer_connection.chat_service = self.chat
 
 
 class SessionManager:
