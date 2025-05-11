@@ -72,6 +72,8 @@ class Groq(LLMService):
             log_time(start_time, "Groq")
             start_time = None
             answer = chunk.choices[0].delta.content
-            yield answer
+            if answer is not None:
+                yield answer
+                buffer.append(answer)
 
         self.messages.add_model_output("".join(buffer))

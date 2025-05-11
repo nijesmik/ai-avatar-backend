@@ -34,7 +34,7 @@ class PeerConnection(RTCPeerConnection):
         text = stt.text
         emit_task = asyncio.create_task(emit_speech_message(self.sid, "user", text))
 
-        await self.tts_track.run_synthesis(self.chat_service.send_utterance(text))
+        await self.tts_track.run_synthesis(self.chat_service.send_utterance_stream(text))
 
         await emit_task
         await self.chat_service.wait_emit_message()

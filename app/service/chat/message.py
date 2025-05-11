@@ -52,6 +52,17 @@ class Messages:
     def get(self):
         return self._cache
 
+    def pop(self):
+        if self.messages:
+            message = self.messages.pop()
+            self._cache.pop()
+            return message
+        return None
+
+    @property
+    def last_message(self) -> Message:
+        return self.messages[-1]
+
     @property
     def provider(self) -> Provider:
         return self._provider
